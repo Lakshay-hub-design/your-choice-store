@@ -4,6 +4,8 @@ import helmet from "helmet";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import hpp from "hpp";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 
@@ -12,6 +14,19 @@ app.use(helmet());
 app.use(compression());
 
 app.use(morgan("dev"));
+app.use(hpp());
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      message: "Too many requests. Please try again later.",
+    },
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

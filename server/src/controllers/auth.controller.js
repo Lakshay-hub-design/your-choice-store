@@ -68,6 +68,18 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Current user fetched successfully", user));
 });
 
+const forgotPassword = asyncHandler(async (req, res) => {
+  const result = await authService.forgotPassword(req.body.email);
+
+  return res.status(200).json(new ApiResponse(200, result.message, null));
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const result = await authService.resetPassword(req.body);
+
+  return res.status(200).json(new ApiResponse(200, result.message, null));
+});
+
 export {
   registerCustomer,
   verifyEmail,
@@ -76,4 +88,6 @@ export {
   refreshToken,
   logout,
   getCurrentUser,
+  forgotPassword,
+  resetPassword,
 };

@@ -3,7 +3,7 @@ import ApiError from "../utils/ApiError.js";
 import mongoose from "mongoose";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/token.js";
 import { generateRandomToken, hashToken } from "../utils/crypto.js";
-import emailServce from "./email.service.js";
+import emailService from "./email.service.js";
 
 const findUserByEmail = async (email) => {
   return await User.findOne({
@@ -38,46 +38,27 @@ const registerCustomer = async (userData) => {
     }
   }
 
-  const session = await mongoose.startSession();
+  const { token, hashToken, expiresAt } = createVerificationToken();
+
+  const user = await User.create({
+    fullName,
+    email,
+    phone,
+    password,
+    isVerified: false,
+    verificationToken: hashToken,
+    verificationTokenExpires: expiresAt,
+    lastVerificationEmailSentAt: new Date(),
+  });
 
   try {
-    session.startTransaction();
-
-    const user = await User.create(
-      [
-        {
-          fullName,
-          email,
-          phone,
-          password,
-          isVerified: false,
-        },
-      ],
-      { session }
-    );
-
-    const createdUser = user[0];
-
-    const { token, hashToken, expiresAt } = createVerificationToken();
-
-    user.verificationToken = hashToken;
-    user.verificationTokenExpires = expiresAt;
-    user.lastVerificationEmailSentAt = new Date();
-
-    await user.save({ session });
-
-    await session.commitTransaction();
+    await emailService.sendVerificationEmail(user, token);
   } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+    logger.error(`Failed to send verification email to ${user.email}:`, error);
   }
 
-  await emailServce.sendVerificationEmail(user, token);
-
   return {
-    message: "Account created successfully. Please verify your email.",
+    message: "Account created successfully. Please check your email to verify your account.",
   };
 };
 
@@ -147,7 +128,7 @@ const resendVerificationEmail = async (email) => {
 
   await user.save();
 
-  await emailServce.sendVerificationEmail(user, token);
+  await emailService.sendVerificationEmail(user, token);
 
   return {
     message: "Verification email sent succesfully",
@@ -251,6 +232,63 @@ const refreshAccessToken = async (refreshToken) => {
   };
 };
 
+const forgotPassword = async (email) => {
+  const user = await User.findOne({
+    email: email.toLowerCase(),
+  }).select("+passwordResetToken +passwordResetTokenExpires");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (!user.isVerified) {
+    throw new ApiError(403, "Please verify your email first");
+  }
+
+  const token = generateRandomToken();
+
+  user.passwordResetToken = hashToken(token);
+  user.passwordResetTokenExpires = Date.now() + 10 * 60 * 1000;
+
+  await user.save();
+
+  await emailService.sendPasswordResetEmail(user, token);
+
+  return {
+    message: "Password reset email sent successfully.",
+  };
+};
+
+const resetPassword = async ({ token, password }) => {
+  const hashedToken = hashToken(token);
+
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetTokenExpires: {
+      $gt: new Date(),
+    },
+  }).select("+password +passwordResetToken +passwordResetTokenExpires");
+
+  if (!user) {
+    throw new ApiError(400, "Invalid or expired reset token");
+  }
+
+  user.password = password;
+
+  user.passwordChangedAt = new Date();
+
+  user.passwordResetToken = undefined;
+  user.passwordResetTokenExpires = undefined;
+
+  user.refreshToken = "";
+
+  await user.save();
+
+  return {
+    message: "Password reset successfully.",
+  };
+};
+
 const getCurrentUser = async (userId) => {
   const user = await User.findById(userId);
 
@@ -269,6 +307,8 @@ const authService = {
   logout,
   refreshAccessToken,
   getCurrentUser,
+  forgotPassword,
+  resetPassword,
 };
 
 export default authService;
