@@ -52,10 +52,12 @@ import errorMiddleware from "./middlewares/errorMiddleware.js";
 import categoryRoutes from "./routes/category.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import addressRoutes from "./routes/address.routes.js";
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/addresses", addressRoutes);
 
 app.use(notFound);
 app.use(errorMiddleware);
