@@ -1,39 +1,50 @@
 "use client";
 
 import { useEffect } from "react";
+
 import api from "@/lib/axios";
 import useAuthStore from "@/store/authStore";
 
 export default function AuthInitializer() {
-  const setAuth = useAuthStore((state) => state.setAuth);
-
-  const clearAuth = useAuthStore((state) => state.clearAuth);
-
-  const setLoading = useAuthStore((state) => state.setLoading);
-
   useEffect(() => {
+    let isMounted = true;
+
     const initializeAuth = async () => {
+      const { setAccessToken, setUser, clearAuth, setLoading } = useAuthStore.getState();
+
       try {
         const refreshResponse = await api.post("/auth/refresh-token");
 
         const accessToken = refreshResponse.data.data.accessToken;
 
-        useAuthStore.getState().setAccessToken(accessToken);
+        if (!isMounted) return;
+
+        setAccessToken(accessToken);
 
         const userResponse = await api.get("/auth/me");
 
+        if (!isMounted) return;
+
         const user = userResponse.data.data;
 
-        setAuth(user, accessToken);
+        setUser(user);
       } catch {
-        clearAuth();
+        if (isMounted) {
+          clearAuth();
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
-  }, [setAuth, clearAuth, setLoading]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return null;
 }
