@@ -28,11 +28,13 @@ const addressBodySchema = z.object({
 
   placeId: z.string().trim().optional().or(z.literal("")),
 
-  location: z.object({
-    latitude: z.number().min(-90).max(90),
+  location: z
+    .object({
+      latitude: z.number().min(-90).max(90),
 
-    longitude: z.number().min(-180).max(180),
-  }),
+      longitude: z.number().min(-180).max(180),
+    })
+    .optional(),
 
   addressType: z.enum(Object.values(ADDRESS_TYPES)).optional(),
 

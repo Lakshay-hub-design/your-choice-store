@@ -78,12 +78,10 @@ const addressSchema = new mongoose.Schema(
       _id: false,
       latitude: {
         type: Number,
-        required: true,
       },
 
       longitude: {
         type: Number,
-        required: true,
       },
     },
 

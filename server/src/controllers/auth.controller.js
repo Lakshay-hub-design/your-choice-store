@@ -40,8 +40,7 @@ const login = asyncHandler(async (req, res) => {
 const refreshToken = asyncHandler(async (req, res) => {
   const token = req.cookies.refreshToken;
 
-  const { accessToken, refreshToken: newRefreshToken } =
-    await authService.refreshAccessToken(token);
+  const { accessToken, newRefreshToken } = await authService.refreshAccessToken(token);
 
   res.cookie("refreshToken", newRefreshToken, refreshTokenCookieOptions);
 

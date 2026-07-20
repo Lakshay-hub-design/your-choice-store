@@ -38,7 +38,7 @@ const registerCustomer = async (userData) => {
     }
   }
 
-  const { token, hashToken, expiresAt } = createVerificationToken();
+  const { token, hashedToken, expiresAt } = createVerificationToken();
 
   const user = await User.create({
     fullName,
@@ -46,7 +46,7 @@ const registerCustomer = async (userData) => {
     phone,
     password,
     isVerified: false,
-    verificationToken: hashToken,
+    verificationToken: hashedToken,
     verificationTokenExpires: expiresAt,
     lastVerificationEmailSentAt: new Date(),
   });
@@ -70,7 +70,7 @@ const verifyEmail = async (token) => {
   const hashedToken = hashToken(token);
 
   const user = await User.findOne({
-    verificationToken: hashToken,
+    verificationToken: hashedToken,
     verificationTokenExpires: {
       $gt: new Date(),
     },

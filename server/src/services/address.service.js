@@ -4,6 +4,7 @@ import ApiError from "../utils/ApiError.js";
 
 const createAddress = async (userId, addressData) => {
   const session = await mongoose.startSession();
+  const MAX_ADDRESSES = 10;
 
   try {
     session.startTransaction();
@@ -11,6 +12,10 @@ const createAddress = async (userId, addressData) => {
     const addressCount = await Address.countDocuments({
       user: userId,
     }).session(session);
+
+    if (addressCount >= MAX_ADDRESSES) {
+      throw new ApiError(400, "Maximum address limit reached.");
+    }
 
     const address = await Address.create(
       [
@@ -37,17 +42,19 @@ const createAddress = async (userId, addressData) => {
 const getUserAddresses = async (userId) => {
   return await Address.find({
     user: userId,
-  }).sort({
-    isDefault: -1,
-    createdAt: -1,
-  });
+  })
+    .sort({
+      isDefault: -1,
+      createdAt: -1,
+    })
+    .lean();
 };
 
 const getAddressById = async (userId, addressId) => {
   const address = await Address.findOne({
     _id: addressId,
     user: userId,
-  });
+  }).leen();
 
   if (!address) {
     throw new ApiError(404, "Address not found");
