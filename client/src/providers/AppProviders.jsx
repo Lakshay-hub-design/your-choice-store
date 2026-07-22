@@ -5,6 +5,7 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AuthInitializer from "./AuthInitializer";
+import CartInitializer from "@/features/cart/components/CartInitializer";
 
 export default function AppProviders({ children }) {
   const [queryClient] = useState(
@@ -23,6 +24,7 @@ export default function AppProviders({ children }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthInitializer />
+      <CartInitializer />
 
       {children}
     </QueryClientProvider>
