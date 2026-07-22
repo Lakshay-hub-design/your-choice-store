@@ -5,6 +5,7 @@ import {
   createAddress,
   updateAddress,
   deleteAddress,
+  setDefaultAddress as setDefaultAddressApi,
 } from "@/features/address/services/addressService";
 
 const useAddressStore = create((set, get) => ({
@@ -96,6 +97,33 @@ const useAddressStore = create((set, get) => ({
       return {
         success: false,
         message: error.response?.data?.message || "Unable to delete address.",
+      };
+    }
+  },
+
+  setDefault: async (id) => {
+    try {
+      const response = await setDefaultAddressApi(id);
+
+      const updatedAddress = response.data?.address;
+
+      set({
+        addresses: get().addresses.map((address) => ({
+          ...address,
+
+          isDefault: address._id === id,
+        })),
+      });
+
+      return {
+        success: true,
+        address: updatedAddress,
+      };
+    } catch (error) {
+      return {
+        success: false,
+
+        message: error.response?.data?.message || "Unable to set default address.",
       };
     }
   },
