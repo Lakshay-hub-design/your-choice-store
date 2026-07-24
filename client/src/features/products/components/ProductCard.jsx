@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import { Heart, Loader2, ShoppingCart, Star } from "lucide-react";
+import { Loader2, ShoppingCart, Star } from "lucide-react";
 
 import useAuthStore from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
@@ -73,6 +73,8 @@ export default function ProductCard({ product }) {
           <Image
             src={image}
             alt={product.name}
+            width={300}
+            height={300}
             loading="lazy"
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
@@ -94,19 +96,13 @@ export default function ProductCard({ product }) {
         </div>
 
         {/* Wishlist */}
-        <button
-          type="button"
-          aria-label="Add to wishlist"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-
-            // Wishlist module comes later.
-          }}
-          className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#6B7280] shadow-sm transition hover:text-[#FF5A5F]"
-        >
-          <Heart size={16} />
-        </button>
+        <div className="absolute top-2 right-2 z-20">
+          <WishlistButton
+            productId={product._id}
+            iconSize={18}
+            className="h-9 w-9 rounded-full border border-[#EDE9E6] bg-white text-[#6B7280] shadow-sm hover:border-[#FF5A5F] hover:text-[#FF5A5F]"
+          />
+        </div>
 
         {outOfStock && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
