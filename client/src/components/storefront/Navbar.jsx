@@ -6,6 +6,7 @@ import { Heart, Menu, Search, ShoppingCart, UserRound, X } from "lucide-react";
 
 import useAuthStore from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
+import useWishlistStore from "@/store/wishlistStore";
 
 import { selectCartCount } from "@/features/cart/selectors/cartSelectors";
 
@@ -17,6 +18,10 @@ export default function Navbar() {
   const user = useAuthStore((state) => state.user);
 
   const cartCount = useCartStore(selectCartCount);
+
+  const wishlistItems = useWishlistStore((state) => state.wishlist?.items);
+
+  const wishlistCount = wishlistItems?.length ?? 0;
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -65,7 +70,7 @@ export default function Navbar() {
             </form>
 
             <div className="flex items-center gap-6">
-              <NavIcon href="/wishlist" icon={<Heart size={21} />} label="Wishlist" />
+              <WishlistLink wishlistCount={wishlistCount} />
 
               <CartLink cartCount={cartCount} />
 
@@ -91,14 +96,16 @@ export default function Navbar() {
             <Logo compact />
 
             <div className="flex items-center gap-4">
-              <Link href="/wishlist" aria-label="Wishlist">
+              <Link href="/account/wishlist" className="relative" aria-label="Wishlist">
                 <Heart size={21} />
+
+                {wishlistCount > 0 && <CountBadge count={wishlistCount} />}
               </Link>
 
               <Link href="/cart" className="relative" aria-label="Cart">
                 <ShoppingCart size={22} />
 
-                {cartCount > 0 && <CartBadge count={cartCount} />}
+                {cartCount > 0 && <CountBadge count={cartCount} />}
               </Link>
             </div>
           </div>
@@ -160,6 +167,22 @@ function NavIcon({ href, icon, label }) {
   );
 }
 
+function WishlistLink({ wishlistCount }) {
+  return (
+    <Link
+      href="/account/wishlist"
+      className="flex items-center gap-2 text-sm font-medium text-[#242424] transition hover:text-[#FF5A5F]"
+    >
+      <span className="relative">
+        <Heart size={21} />
+
+        {wishlistCount > 0 && <CountBadge count={wishlistCount} />}
+      </span>
+      Wishlist
+    </Link>
+  );
+}
+
 function CartLink({ cartCount }) {
   return (
     <Link
@@ -169,14 +192,14 @@ function CartLink({ cartCount }) {
       <span className="relative">
         <ShoppingCart size={22} />
 
-        {cartCount > 0 && <CartBadge count={cartCount} />}
+        {cartCount > 0 && <CountBadge count={cartCount} />}
       </span>
       Cart
     </Link>
   );
 }
 
-function CartBadge({ count }) {
+function CountBadge({ count }) {
   return (
     <span className="absolute -top-2 -right-2 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-[#FF5A5F] px-1 text-[9px] font-bold text-white">
       {count > 99 ? "99+" : count}
