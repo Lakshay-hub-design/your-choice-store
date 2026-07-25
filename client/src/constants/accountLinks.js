@@ -13,12 +13,12 @@ export const accountLinks = [
   },
   {
     name: "My Orders",
-    href: "/orders",
+    href: "/account/orders",
     icon: Package,
   },
   {
     name: "My Wishlist",
-    href: "/wishlist",
+    href: "/account/wishlist",
     icon: Heart,
   },
   {

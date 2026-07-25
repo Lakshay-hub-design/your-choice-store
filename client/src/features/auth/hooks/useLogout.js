@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 import useAuthStore from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
+import useWishlistStore from "@/store/wishlistStore";
 
 import { logoutCustomer } from "@/features/auth/services/authService";
 
@@ -18,14 +19,13 @@ export default function useLogout() {
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
-      // Clear authentication state
-      clearAuth();
-
-      // Clear previous user's cart
       useCartStore.getState().resetCart();
 
-      router.replace("/login");
+      useWishlistStore.getState().resetWishlist();
 
+      clearAuth();
+
+      router.replace("/login");
       router.refresh();
     }
   };
