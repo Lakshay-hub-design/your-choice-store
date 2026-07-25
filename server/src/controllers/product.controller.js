@@ -20,6 +20,16 @@ const getProductBySlug = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Product fetched successfully", product));
 });
 
+const getRelatedProducts = asyncHandler(async (req, res) => {
+  const product = await productService.getProductBySlug(req.params.slug);
+
+  const products = await productService.getRelatedProducts(product._id, product.category._id, 4);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Related products fetched successfully", products));
+});
+
 const updateProduct = asyncHandler(async (req, res) => {
   const product = await productService.updateProduct(req.params.id, req.body, req.files);
 
@@ -32,4 +42,11 @@ const deleteProduct = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Product deleted successfully"));
 });
 
-export { createProduct, getAllProducts, getProductBySlug, updateProduct, deleteProduct };
+export {
+  createProduct,
+  getAllProducts,
+  getProductBySlug,
+  getRelatedProducts,
+  updateProduct,
+  deleteProduct,
+};
