@@ -7,3 +7,14 @@ export const placeOrderSchema = z.object({
     paymentMethod: z.enum(["COD"]),
   }),
 });
+
+export const cancelOrderSchema = z.object({
+  body: z.object({
+    reason: z
+      .string()
+      .trim()
+      .max(500, "Cancellation reason cannot exceed 500 characters")
+      .optional()
+      .default(""),
+  }),
+});

@@ -281,10 +281,111 @@ const getUserOrders = async ({ userId, page = 1, limit = 10, status }) => {
   };
 };
 
+const cancelOrder = async ({ userId, orderId, reason = "" }) => {
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new ApiError(400, "Invalid order ID");
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    /*
+     * Find only an order belonging
+     * to the authenticated customer.
+     */
+    const order = await Order.findOne({
+      _id: orderId,
+      user: userId,
+    }).session(session);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    /*
+     * Customers may cancel only before
+     * order processing has started.
+     */
+    const cancellableStatuses = [ORDER_STATUS.PLACED, ORDER_STATUS.CONFIRMED];
+
+    if (!cancellableStatuses.includes(order.orderStatus)) {
+      throw new ApiError(400, `Order cannot be cancelled when status is ${order.orderStatus}`);
+    }
+
+    /*
+     * Restore inventory.
+     *
+     * placeCODOrder decreases stock and
+     * increases sold, so cancellation
+     * must reverse both operations.
+     */
+    const stockUpdates = order.items.map((item) => ({
+      updateOne: {
+        filter: {
+          _id: item.product,
+        },
+
+        update: {
+          $inc: {
+            stock: item.quantity,
+            sold: -item.quantity,
+          },
+        },
+      },
+    }));
+
+    if (stockUpdates.length > 0) {
+      await Product.bulkWrite(stockUpdates, {
+        session,
+      });
+    }
+
+    /*
+     * Update order status.
+     */
+    const cancelledAt = new Date();
+
+    order.orderStatus = ORDER_STATUS.CANCELLED;
+
+    order.cancelledAt = cancelledAt;
+
+    order.cancellationReason = reason.trim();
+
+    /*
+     * Add cancellation to timeline.
+     */
+    order.statusHistory.push({
+      status: ORDER_STATUS.CANCELLED,
+      timestamp: cancelledAt,
+    });
+
+    await order.save({
+      session,
+    });
+
+    /*
+     * Commit inventory restoration
+     * and order cancellation together.
+     */
+    await session.commitTransaction();
+
+    return order;
+  } catch (error) {
+    await session.abortTransaction();
+
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+};
+
 const orderService = {
   placeCODOrder,
   getOrderById,
   getUserOrders,
+  cancelOrder,
 };
 
 export default orderService;

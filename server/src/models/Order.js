@@ -232,6 +232,13 @@ const orderSchema = new mongoose.Schema(
       },
     },
 
+    cancellationReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: "",
+    },
+
     placedAt: {
       type: Date,
       default: Date.now,

@@ -2,6 +2,7 @@ import orderService from "../services/order.service.js";
 
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 
 const placeOrder = asyncHandler(async (req, res) => {
   const { addressId, paymentMethod } = req.body;
@@ -48,4 +49,14 @@ const getUserOrders = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Orders fetched successfully", result));
 });
 
-export { placeOrder, getOrderById, getUserOrders };
+const cancelOrder = asyncHandler(async (req, res) => {
+  const order = await orderService.cancelOrder({
+    userId: req.user._id,
+    orderId: req.params.orderId,
+    reason: req.body.reason || "",
+  });
+
+  return res.status(200).json(new ApiResponse(200, "Order cancelled successfully", order));
+});
+
+export { placeOrder, getOrderById, getUserOrders, cancelOrder };
