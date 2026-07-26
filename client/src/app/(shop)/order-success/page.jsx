@@ -51,7 +51,7 @@ function OrderSuccessContent() {
 
         const response = await getOrderById(orderId);
 
-        setOrder(response.data?.data);
+        setOrder(response);
       } catch (error) {
         setError(error.response?.data?.message || "Unable to load order details.");
       } finally {

@@ -55,15 +55,13 @@ export default function OrdersPage() {
         setIsLoading(true);
         setError("");
 
-        const response = await getMyOrders({
+        const data = await getMyOrders({
           page,
           limit: 10,
           status,
         });
 
         if (cancelled) return;
-
-        const data = response.data?.data;
 
         setOrders(data?.orders || []);
 

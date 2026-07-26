@@ -11,7 +11,6 @@ import {
   Box,
   Check,
   CheckCircle2,
-  Circle,
   Clock3,
   MapPin,
   Package,
@@ -19,7 +18,11 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { getOrderById } from "@/features/orders/services/orderService";
+import { getOrderById, cancelOrder } from "@/features/orders/services/orderService";
+
+import { toast } from "sonner";
+
+import CancelOrderModal from "@/features/orders/components/CancelOrderModal";
 
 export default function OrderDetailsPage({ params }) {
   const { orderId } = use(params);
@@ -29,6 +32,12 @@ export default function OrderDetailsPage({ params }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const [error, setError] = useState("");
+
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const [cancelError, setCancelError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +51,7 @@ export default function OrderDetailsPage({ params }) {
 
         if (cancelled) return;
 
-        setOrder(response.data?.data);
+        setOrder(response);
       } catch (error) {
         if (cancelled) return;
 
@@ -69,6 +78,29 @@ export default function OrderDetailsPage({ params }) {
     return <OrderError message={error} />;
   }
 
+  const handleCancelOrder = async (reason) => {
+    if (isCancelling) return;
+
+    try {
+      setIsCancelling(true);
+      setCancelError("");
+
+      const updatedOrder = await cancelOrder(orderId, reason);
+
+      if (updatedOrder) {
+        setOrder(updatedOrder);
+      }
+
+      toast.success("Order cancelled successfully");
+
+      setCancelModalOpen(false);
+    } catch (error) {
+      setCancelError(error.response?.data?.message || "Unable to cancel order. Please try again.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <div>
       <Link
@@ -79,7 +111,13 @@ export default function OrderDetailsPage({ params }) {
         Back to Orders
       </Link>
 
-      <OrderHeader order={order} />
+      <OrderHeader
+        order={order}
+        onCancel={() => {
+          setCancelError("");
+          setCancelModalOpen(true);
+        }}
+      />
 
       <div className="mt-6">
         <OrderTimeline order={order} />
@@ -98,11 +136,23 @@ export default function OrderDetailsPage({ params }) {
           <OrderPriceSummary pricing={order.pricing} />
         </div>
       </div>
+      <CancelOrderModal
+        open={cancelModalOpen}
+        onClose={() => {
+          if (isCancelling) return;
+
+          setCancelModalOpen(false);
+          setCancelError("");
+        }}
+        onConfirm={handleCancelOrder}
+        isCancelling={isCancelling}
+        error={cancelError}
+      />
     </div>
   );
 }
 
-function OrderHeader({ order }) {
+function OrderHeader({ order, onCancel }) {
   return (
     <div className="mt-5 flex flex-col justify-between gap-4 rounded-2xl border border-[#EDE9E6] bg-white p-5 sm:flex-row sm:items-center sm:p-6">
       <div>
@@ -121,14 +171,18 @@ function OrderHeader({ order }) {
         </p>
       </div>
 
-      <div className="rounded-xl bg-[#FFF9F5] px-4 py-3 sm:text-right">
-        <p className="text-[10px] font-medium tracking-wide text-[#9CA3AF] uppercase">
-          Order Total
-        </p>
+      <div className="flex flex-col gap-3 sm:items-end">
+        <div className="w-full rounded-xl bg-[#FFF9F5] px-4 py-3 sm:w-auto sm:text-right">
+          <p className="text-[10px] font-medium tracking-wide text-[#9CA3AF] uppercase">
+            Order Total
+          </p>
 
-        <p className="mt-1 text-xl font-extrabold text-[#242424]">
-          ₹{order.pricing.grandTotal.toLocaleString("en-IN")}
-        </p>
+          <p className="mt-1 text-xl font-extrabold text-[#242424]">
+            ₹{order.pricing.grandTotal.toLocaleString("en-IN")}
+          </p>
+        </div>
+
+        <CancelOrderButton status={order.orderStatus} onCancel={onCancel} />
       </div>
     </div>
   );
@@ -162,6 +216,25 @@ const ORDER_STEPS = [
   },
 ];
 
+function CancelOrderButton({ status, onCancel }) {
+  const cancellableStatuses = ["PLACED", "CONFIRMED"];
+
+  if (!cancellableStatuses.includes(status)) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onCancel}
+      className="inline-flex items-center justify-center gap-2 text-xs font-semibold text-red-500 transition hover:text-red-600"
+    >
+      <XCircle size={14} />
+      Cancel Order
+    </button>
+  );
+}
+
 function OrderTimeline({ order }) {
   const statusHistory = order.statusHistory || [];
 
@@ -183,6 +256,14 @@ function OrderTimeline({ order }) {
             <h2 className="font-bold text-[#242424]">Order Cancelled</h2>
 
             <p className="mt-1 text-sm text-[#6B7280]">This order has been cancelled.</p>
+
+            {order.cancellationReason && (
+              <div className="mt-3 rounded-lg bg-red-50 px-3 py-2">
+                <p className="text-[10px] font-semibold text-red-500">Cancellation reason</p>
+
+                <p className="mt-1 text-xs leading-5 text-red-700">{order.cancellationReason}</p>
+              </div>
+            )}
 
             {(cancelledEntry?.timestamp || order.cancelledAt) && (
               <p className="mt-1 text-xs text-[#9CA3AF]">
