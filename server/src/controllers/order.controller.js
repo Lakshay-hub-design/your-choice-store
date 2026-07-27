@@ -1,4 +1,5 @@
 import orderService from "../services/order.service.js";
+import ApiError from "../utils/ApiError.js";
 
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -7,14 +8,20 @@ import mongoose from "mongoose";
 const placeOrder = asyncHandler(async (req, res) => {
   const { addressId, paymentMethod } = req.body;
 
+  const idempotencyKey = req.headers["idempotency-key"];
+
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    throw new ApiError(400, "Idempotency key is required");
+  }
+
   let order;
 
   switch (paymentMethod) {
     case "COD":
       order = await orderService.placeCODOrder({
         userId: req.user._id,
-
         addressId,
+        idempotencyKey,
       });
 
       break;

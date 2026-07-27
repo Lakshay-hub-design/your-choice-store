@@ -22,6 +22,10 @@ const buildCartSummary = ({ cart, products }) => {
       throw new ApiError(400, `${product.name} is no longer available`);
     }
 
+    if (product.stock <= 0) {
+      throw new ApiError(400, `${product.name} is currently out of stock`);
+    }
+
     if (product.stock < cartItem.quantity) {
       throw new ApiError(400, `Only ${product.stock} units of ${product.name} are available`);
     }

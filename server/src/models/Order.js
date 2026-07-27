@@ -253,6 +253,11 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    idempotencyKey: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -263,6 +268,21 @@ orderSchema.index({
   user: 1,
   createdAt: -1,
 });
+
+orderSchema.index(
+  {
+    user: 1,
+    idempotencyKey: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      idempotencyKey: {
+        $type: "string",
+      },
+    },
+  }
+);
 
 const Order = mongoose.model("Order", orderSchema);
 

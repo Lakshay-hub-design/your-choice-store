@@ -26,9 +26,37 @@ const generateOrderNumber = () => {
 /**
  * Place a Cash on Delivery order.
  */
-const placeCODOrder = async ({ userId, addressId }) => {
+const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
   if (!mongoose.Types.ObjectId.isValid(addressId)) {
     throw new ApiError(400, "Invalid address ID");
+  }
+
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    throw new ApiError(400, "Idempotency key is required");
+  }
+
+  /*
+   * Normalize and limit the key.
+   */
+  const normalizedIdempotencyKey = idempotencyKey.trim();
+
+  if (!normalizedIdempotencyKey || normalizedIdempotencyKey.length > 100) {
+    throw new ApiError(400, "Invalid idempotency key");
+  }
+
+  /*
+   * Fast path:
+   *
+   * If this request was already completed,
+   * return the previously created order.
+   */
+  const existingOrder = await Order.findOne({
+    user: userId,
+    idempotencyKey: normalizedIdempotencyKey,
+  });
+
+  if (existingOrder) {
+    return existingOrder;
   }
 
   const session = await mongoose.startSession();
@@ -37,10 +65,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     session.startTransaction();
 
     /*
-     * 1. Validate the selected address.
-     *
-     * We include userId so a customer
-     * cannot use another customer's address.
+     * 1. Validate address ownership.
      */
     const address = await Address.findOne({
       _id: addressId,
@@ -52,7 +77,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     }
 
     /*
-     * 2. Get the customer's cart.
+     * 2. Load cart.
      */
     const cart = await Cart.findOne({
       user: userId,
@@ -63,7 +88,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     }
 
     /*
-     * 3. Load the latest product data.
+     * 3. Load latest product data.
      */
     const productIds = cart.items.map((item) => item.product);
 
@@ -75,10 +100,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
 
     /*
      * 4. Validate products, stock and
-     * calculate trusted server-side pricing.
-     *
-     * This same service is used by
-     * GET /checkout.
+     * calculate server-authoritative pricing.
      */
     const { items: orderItems, pricing } = cartPricingService.buildCartSummary({
       cart,
@@ -86,11 +108,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     });
 
     /*
-     * 5. Create a snapshot of the
-     * delivery address.
-     *
-     * Future changes to the customer's
-     * saved address won't affect this order.
+     * 5. Snapshot delivery address.
      */
     const shippingAddress = {
       fullName: address.fullName,
@@ -113,7 +131,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     };
 
     /*
-     * 6. Create the order.
+     * 6. Create order.
      */
     const placedAt = new Date();
 
@@ -123,6 +141,8 @@ const placeCODOrder = async ({ userId, addressId }) => {
           orderNumber: generateOrderNumber(),
 
           user: userId,
+
+          idempotencyKey: normalizedIdempotencyKey,
 
           items: orderItems,
 
@@ -153,12 +173,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     );
 
     /*
-     * 7. Atomically reduce stock
-     * and increase sold count.
-     *
-     * The stock condition protects us
-     * if inventory changes while the
-     * customer is placing the order.
+     * 7. Atomically reduce inventory.
      */
     for (const cartItem of cart.items) {
       const result = await Product.updateOne(
@@ -192,7 +207,7 @@ const placeCODOrder = async ({ userId, addressId }) => {
     }
 
     /*
-     * 8. Clear the customer's cart.
+     * 8. Clear cart.
      */
     cart.items = [];
 
@@ -201,18 +216,38 @@ const placeCODOrder = async ({ userId, addressId }) => {
     });
 
     /*
-     * 9. Everything succeeded.
+     * 9. Commit transaction.
      */
     await session.commitTransaction();
 
     return order;
   } catch (error) {
     /*
-     * Order creation, stock changes
-     * and cart clearing are all rolled
-     * back if anything fails.
+     * Abort only if the transaction
+     * is still active.
      */
-    await session.abortTransaction();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    /*
+     * MongoDB duplicate-key error.
+     *
+     * Another request with the same
+     * idempotency key may have completed
+     * concurrently.
+     */
+    if (error?.code === 11000) {
+      const existingOrder = await Order.findOne({
+        user: userId,
+
+        idempotencyKey: normalizedIdempotencyKey,
+      });
+
+      if (existingOrder) {
+        return existingOrder;
+      }
+    }
 
     throw error;
   } finally {
