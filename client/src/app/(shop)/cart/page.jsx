@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 
 import { ShoppingBag, Trash2 } from "lucide-react";
 
+import { toast } from "sonner";
+
 import useCartStore from "@/store/cartStore";
 
 import {
@@ -20,6 +22,10 @@ import CartSummary from "@/features/cart/components/CartSummary";
 import EmptyCart from "@/features/cart/components/EmptyCart";
 import CartSkeleton from "@/features/cart/components/CartSkeleton";
 import RemoveCartItemModal from "@/features/cart/components/RemoveCartItemModal";
+import ErrorState from "@/components/ui/ErrorState";
+
+import useAuthStore from "@/store/authStore";
+import { getLoginUrl } from "@/lib/authRedirect";
 
 export default function CartPage() {
   const router = useRouter();
@@ -36,6 +42,10 @@ export default function CartPage() {
 
   const isInitialized = useCartStore((state) => state.isInitialized);
 
+  const fetchError = useCartStore((state) => state.error);
+
+  const fetchCart = useCartStore((state) => state.fetchCart);
+
   const updateQuantity = useCartStore((state) => state.updateQuantity);
 
   const removeItem = useCartStore((state) => state.removeItem);
@@ -51,6 +61,8 @@ export default function CartPage() {
   const [isClearing, setIsClearing] = useState(false);
 
   const [error, setError] = useState("");
+
+  const user = useAuthStore((state) => state.user);
 
   /* ================================
      QUANTITY
@@ -103,6 +115,8 @@ export default function CartPage() {
       return;
     }
 
+    toast.success("Item removed from cart");
+
     setItemToRemove(null);
   };
 
@@ -111,16 +125,36 @@ export default function CartPage() {
   ================================= */
 
   const handleClearCart = async () => {
+    if (isClearing) return;
+
     setError("");
     setIsClearing(true);
 
-    const result = await clearAllItems();
+    try {
+      const result = await clearAllItems();
 
-    setIsClearing(false);
+      if (!result.success) {
+        setError(result.message);
 
-    if (!result.success) {
-      setError(result.message);
+        toast.error(result.message || "Unable to clear cart.");
+
+        return;
+      }
+
+      toast.success("Cart cleared");
+    } finally {
+      setIsClearing(false);
     }
+  };
+
+  const handleCheckout = () => {
+    if (!user) {
+      router.push(getLoginUrl("/checkout"));
+
+      return;
+    }
+
+    router.push("/checkout");
   };
 
   /* ================================
@@ -134,6 +168,24 @@ export default function CartPage() {
           <CartSkeleton />
         </div>
       </section>
+    );
+  }
+
+  /* ================================
+   FETCH ERROR
+================================= */
+
+  if (fetchError) {
+    return (
+      <main className="min-h-screen bg-[#FFF9F5]">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ErrorState
+            title="Unable to load your cart"
+            description={fetchError}
+            onRetry={fetchCart}
+          />
+        </div>
+      </main>
     );
   }
 
@@ -220,7 +272,7 @@ export default function CartPage() {
             subtotal={subtotal}
             savings={savings}
             itemCount={itemCount}
-            onCheckout={() => router.push("/checkout")}
+            onCheckout={handleCheckout}
           />
         </div>
       </div>

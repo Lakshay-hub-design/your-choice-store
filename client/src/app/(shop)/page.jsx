@@ -8,6 +8,8 @@ import { getProducts } from "@/features/products/services/productService";
 
 import { getCategories } from "@/features/categories/services/categoryService";
 
+import RecentlyViewedProducts from "@/features/products/components/RecentlyViewedProducts";
+
 export default async function HomePage() {
   let bestSellers = [];
   let featuredProducts = [];
@@ -61,6 +63,8 @@ export default async function HomePage() {
           products={featuredProducts}
           href="/products?featured=true"
         />
+
+        <RecentlyViewedProducts />
       </div>
     </div>
   );

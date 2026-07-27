@@ -8,7 +8,7 @@ export const accountLinks = [
   },
   {
     name: "Manage Addresses",
-    href: "/addresses",
+    href: "/account/addresses",
     icon: MapPin,
   },
   {
@@ -23,7 +23,7 @@ export const accountLinks = [
   },
   {
     name: "Password Manager",
-    href: "/change-password",
+    href: "/account/change-password",
     icon: KeyRound,
   },
 ];

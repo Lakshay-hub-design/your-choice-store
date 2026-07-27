@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Eye, EyeOff, LockKeyhole, Mail, Phone } from "lucide-react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useForm } from "react-hook-form";
 
@@ -16,6 +16,8 @@ import { loginSchema } from "@/features/auth/schemas/loginSchema";
 import { loginCustomer } from "@/features/auth/services/authService";
 
 import useAuthStore from "@/store/authStore";
+
+import { sanitizeReturnTo } from "@/lib/authRedirect";
 
 import { Poppins } from "next/font/google";
 
@@ -29,6 +31,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const returnTo = searchParams.get("returnTo");
+
+  const safeReturnTo = sanitizeReturnTo(returnTo);
 
   const setAuth = useAuthStore((state) => state.setAuth);
 
@@ -58,7 +65,7 @@ export default function LoginPage() {
 
       setAuth(user, accessToken);
 
-      router.replace("/");
+      router.replace(safeReturnTo);
     } catch (error) {
       const message = error.response?.data?.message || "Unable to sign in. Please try again.";
 
@@ -227,7 +234,12 @@ export default function LoginPage() {
             {/* Register */}
             <p className="mt-7 text-center text-sm text-[#6B7280]">
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-semibold text-[#FF5A5F] hover:underline">
+              <Link
+                href={
+                  returnTo ? `/register?returnTo=${encodeURIComponent(safeReturnTo)}` : "/register"
+                }
+                className="font-semibold text-[#FF5A5F] hover:underline"
+              >
                 Create Account
               </Link>
             </p>

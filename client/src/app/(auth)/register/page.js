@@ -5,13 +5,14 @@ import Link from "next/link";
 import { Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import Image from "next/image";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { registerSchema } from "@/features/auth/schemas/registerSchema";
 import { registerCustomer } from "@/features/auth/services/authService";
 
+import { sanitizeReturnTo } from "@/lib/authRedirect";
 import { Poppins } from "next/font/google";
 
 const poppins = Poppins({
@@ -26,6 +27,11 @@ export default function RegisterPage() {
 
   const router = useRouter();
 
+  const searchParams = useSearchParams();
+
+  const returnTo = searchParams.get("returnTo");
+
+  const safeReturnTo = sanitizeReturnTo(returnTo);
   const {
     register,
     handleSubmit,
@@ -255,7 +261,10 @@ export default function RegisterPage() {
             {/* Sign In */}
             <p className="mt-7 text-center text-sm text-[#6B7280]">
               Already have an account?{" "}
-              <Link href="/login" className="font-semibold text-[#FF5A5F] hover:underline">
+              <Link
+                className="font-semibold text-[#FF5A5F] hover:underline"
+                href={returnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : "/login"}
+              >
                 Sign In
               </Link>
             </p>
