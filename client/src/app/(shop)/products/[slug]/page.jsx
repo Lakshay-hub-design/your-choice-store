@@ -6,6 +6,9 @@ import RelatedProducts from "@/features/products/components/RelatedProducts";
 
 import { getProductBySlug, getRelatedProducts } from "@/features/products/services/productService";
 
+import RecentlyViewedTracker from "@/features/products/components/RecentlyViewedTracker";
+import RecentlyViewedProducts from "@/features/products/components/RecentlyViewedProducts";
+
 export default async function ProductDetailsPage({ params }) {
   const { slug } = await params;
 
@@ -49,6 +52,9 @@ export default async function ProductDetailsPage({ params }) {
 
         {/* Related products */}
         <RelatedProducts products={relatedProducts} />
+
+        <RecentlyViewedProducts excludeProductId={product._id} />
+        <RecentlyViewedTracker product={product} />
       </div>
     </div>
   );

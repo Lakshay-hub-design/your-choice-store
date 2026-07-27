@@ -6,6 +6,7 @@ import {
   getProductBySlug,
   updateProduct,
   deleteProduct,
+  getRelatedProducts,
 } from "../controllers/product.controller.js";
 
 import validate from "../middlewares/validate.js";
@@ -18,6 +19,8 @@ const router = express.Router();
 router.post("/", upload.array("productImages", 8), validate(createProductSchema), createProduct);
 
 router.get("/", getAllProducts);
+
+router.get("/:slug/related", getRelatedProducts);
 
 router.get("/slug/:slug", getProductBySlug);
 

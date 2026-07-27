@@ -8,14 +8,25 @@ import { Loader2, ShoppingCart, Star } from "lucide-react";
 import useAuthStore from "@/store/authStore";
 import useCartStore from "@/store/cartStore";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { getLoginUrl } from "@/lib/authRedirect";
+
 import WishlistButton from "@/features/wishlist/components/WishlistButton";
+import { toast } from "sonner";
 
 import Image from "next/image";
 
 export default function ProductCard({ product }) {
-  const [isAdding, setIsAdding] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [message, setMessage] = useState("");
+  const query = searchParams.toString();
+
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
+
+  const [isAdding, setIsAdding] = useState(false);
 
   const user = useAuthStore((state) => state.user);
 
@@ -43,26 +54,30 @@ export default function ProductCard({ product }) {
     }
 
     if (!user) {
-      // Later we can preserve the current URL
-      // and redirect back after login.
-      window.location.href = "/login";
+      router.push(getLoginUrl(currentUrl));
+
       return;
     }
 
-    setMessage("");
     setIsAdding(true);
 
-    const result = await addItem(product._id, 1);
+    try {
+      const result = await addItem(product._id, 1);
 
-    setIsAdding(false);
+      if (!result.success) {
+        toast.error(result.message || "Unable to add product to cart.");
 
-    if (!result.success) {
-      setMessage(result.message || "Unable to add product.");
+        return;
+      }
 
-      return;
+      toast.success("Added to cart", {
+        description: product.name,
+      });
+    } catch {
+      toast.error("Unable to add product to cart.");
+    } finally {
+      setIsAdding(false);
     }
-
-    setMessage("Added!");
   };
 
   return (
@@ -174,16 +189,6 @@ export default function ProductCard({ product }) {
             </>
           )}
         </button>
-
-        {message && (
-          <p
-            className={`mt-2 text-center text-[10px] font-medium ${
-              message === "Added!" ? "text-green-600" : "text-red-500"
-            }`}
-          >
-            {message}
-          </p>
-        )}
       </div>
     </article>
   );
