@@ -21,7 +21,7 @@ const items = [
   },
   {
     label: "Wishlist",
-    href: "/wishlist",
+    href: "/account/wishlist",
     icon: Heart,
   },
   {

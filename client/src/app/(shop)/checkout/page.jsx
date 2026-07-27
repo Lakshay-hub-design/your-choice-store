@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import { useRouter } from "next/navigation";
 
-import { AlertCircle, ArrowLeft, Loader2, LockKeyhole, MapPin } from "lucide-react";
+import { AlertCircle, ArrowLeft, LockKeyhole } from "lucide-react";
+
+import { toast } from "sonner";
 
 import { getCheckoutSummary, placeOrder } from "@/features/checkout/services/checkoutService";
 
@@ -14,7 +17,17 @@ import CheckoutItems from "@/features/checkout/components/CheckoutItems";
 import CheckoutPayment from "@/features/checkout/components/CheckoutPayment";
 import CheckoutSummary from "@/features/checkout/components/CheckoutSummary";
 
+import ProtectedRoute from "@/features/auth/ProtectedRoute";
+
 export default function CheckoutPage() {
+  return (
+    <ProtectedRoute>
+      <CheckoutContent />
+    </ProtectedRoute>
+  );
+}
+
+function CheckoutContent() {
   const router = useRouter();
 
   const [checkout, setCheckout] = useState(null);
@@ -29,69 +42,198 @@ export default function CheckoutPage() {
 
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const loadCheckout = async () => {
-      try {
-        setError("");
+  const idempotencyKeyRef = useRef(null);
 
-        const response = await getCheckoutSummary();
+  /* ========================================
+     LOAD / REFRESH CHECKOUT
+  ======================================== */
 
-        const data = response.data?.data;
+  const loadCheckout = useCallback(async ({ showLoader = false } = {}) => {
+    try {
+      if (showLoader) {
+        setIsLoading(true);
+      }
 
-        setCheckout(data);
+      setError("");
 
-        if (data?.defaultAddress?._id) {
-          setSelectedAddressId(data.defaultAddress._id);
-        } else if (data?.addresses?.length) {
-          setSelectedAddressId(data.addresses[0]._id);
+      const response = await getCheckoutSummary();
+
+      const data = response.data?.data;
+
+      if (!data) {
+        throw new Error("Checkout data is unavailable.");
+      }
+
+      setCheckout(data);
+
+      setSelectedAddressId((currentAddressId) => {
+        const addressStillExists = data.addresses?.some(
+          (address) => address._id === currentAddressId
+        );
+
+        if (addressStillExists) {
+          return currentAddressId;
         }
-      } catch (error) {
-        setError(error.response?.data?.message || "Unable to load checkout.");
-      } finally {
+
+        if (data.defaultAddress?._id) {
+          return data.defaultAddress._id;
+        }
+
+        if (data.addresses?.length) {
+          return data.addresses[0]._id;
+        }
+
+        return null;
+      });
+
+      return data;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Unable to load checkout.";
+
+      setError(message);
+
+      return null;
+    } finally {
+      if (showLoader) {
         setIsLoading(false);
       }
-    };
-
-    loadCheckout();
+    }
   }, []);
 
+  /* ========================================
+     INITIAL CHECKOUT
+  ======================================== */
+
+  useEffect(() => {
+    const initializeCheckout = async () => {
+      await loadCheckout();
+
+      setIsLoading(false);
+    };
+
+    initializeCheckout();
+  }, [loadCheckout]);
+
+  /* ========================================
+     PLACE ORDER
+  ======================================== */
+
   const handlePlaceOrder = async () => {
+    if (isPlacingOrder) {
+      return;
+    }
+
     if (!selectedAddressId) {
       setError("Please select a delivery address.");
 
       return;
     }
 
-    if (isPlacingOrder) return;
+    if (!checkout?.pricing) {
+      setError("Checkout information is unavailable. Please refresh the page.");
+
+      return;
+    }
 
     setError("");
     setIsPlacingOrder(true);
 
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+
     try {
-      const response = await placeOrder({
-        addressId: selectedAddressId,
-        paymentMethod,
-      });
+      const response = await placeOrder(
+        {
+          addressId: selectedAddressId,
+          paymentMethod,
+          expectedTotal: checkout.pricing.grandTotal,
+        },
+        idempotencyKeyRef.current
+      );
 
       const order = response.data?.data;
 
-      /*
-       * Backend cleared the cart,
-       * so synchronize frontend Zustand.
-       */
+      if (!order?._id) {
+        throw new Error("Order was placed but the order information is unavailable.");
+      }
+
       useCartStore.getState().resetCart();
+
+      idempotencyKeyRef.current = null;
 
       router.replace(`/order-success?order=${order._id}`);
     } catch (error) {
-      setError(error.response?.data?.message || "Unable to place your order.");
+      const status = error.response?.status;
+
+      const message =
+        error.response?.data?.message || error.message || "Unable to place your order.";
+
+      if (status === 409) {
+        idempotencyKeyRef.current = null;
+
+        const updatedCheckout = await loadCheckout();
+
+        toast.warning("Your cart has changed", {
+          description: message || "Please review your updated order before placing it again.",
+        });
+
+        if (!updatedCheckout) {
+          setError(
+            "Your cart changed, but we couldn't refresh checkout. Please return to your cart."
+          );
+        }
+
+        return;
+      }
+
+      if (status === 404 && message === "Address not found") {
+        idempotencyKeyRef.current = null;
+
+        const updatedCheckout = await loadCheckout();
+
+        toast.error("Delivery address unavailable", {
+          description: "Please select another delivery address.",
+        });
+
+        if (!updatedCheckout) {
+          setError("Unable to refresh your delivery addresses.");
+        }
+
+        return;
+      }
+
+      if (status === 400) {
+        idempotencyKeyRef.current = null;
+
+        setError(message);
+
+        toast.error(message);
+
+        return;
+      }
+
+      setError(message);
+
+      toast.error("Unable to confirm your order", {
+        description: "Please try again. Your checkout is protected against duplicate orders.",
+      });
     } finally {
       setIsPlacingOrder(false);
     }
   };
 
+  /* ========================================
+     LOADING
+  ======================================== */
+
   if (isLoading) {
     return <CheckoutLoading />;
   }
+
+  /* ========================================
+     CHECKOUT LOAD ERROR
+  ======================================== */
 
   if (!checkout) {
     return <CheckoutError message={error} onBack={() => router.push("/cart")} />;
@@ -101,6 +243,7 @@ export default function CheckoutPage() {
     <main className="min-h-screen bg-[#FFF9F5]">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         {/* Back */}
+
         <button
           type="button"
           onClick={() => router.push("/cart")}
@@ -111,11 +254,14 @@ export default function CheckoutPage() {
         </button>
 
         {/* Header */}
+
         <div className="mb-7">
           <h1 className="text-2xl font-bold tracking-tight text-[#242424] sm:text-3xl">Checkout</h1>
 
           <p className="mt-1 text-sm text-[#6B7280]">Complete your order securely.</p>
         </div>
+
+        {/* Error */}
 
         {error && (
           <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -127,23 +273,25 @@ export default function CheckoutPage() {
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
           {/* LEFT */}
+
           <div className="space-y-5">
             <CheckoutAddressSection
-              addresses={checkout.addresses}
+              addresses={checkout.addresses || []}
               selectedAddressId={selectedAddressId}
               onSelect={setSelectedAddressId}
             />
 
             <CheckoutPayment value={paymentMethod} onChange={setPaymentMethod} />
 
-            <CheckoutItems items={checkout.items} />
+            <CheckoutItems items={checkout.items || []} />
           </div>
 
           {/* RIGHT */}
+
           <div className="lg:sticky lg:top-6">
             <CheckoutSummary
               pricing={checkout.pricing}
-              itemCount={checkout.items.length}
+              itemCount={checkout.items?.length || 0}
               disabled={!selectedAddressId || isPlacingOrder}
               isPlacingOrder={isPlacingOrder}
               onPlaceOrder={handlePlaceOrder}

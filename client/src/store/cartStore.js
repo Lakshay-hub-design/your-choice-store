@@ -29,6 +29,7 @@ const useCartStore = create((set, get) => ({
 
       set({
         cart,
+        error: null,
         isInitialized: true,
       });
 

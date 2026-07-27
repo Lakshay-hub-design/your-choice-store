@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-import { Home, Loader2, MapPin, Search, X } from "lucide-react";
+import { Home, Loader2, MapPin, X } from "lucide-react";
 
 import useAddressStore from "@/store/addressStore";
 
 import GoogleAddressAutocomplete from "@/components/account/address/GoogleAddressAutocomplete";
+import { toast } from "sonner";
 
 const initialForm = {
   fullName: "",
@@ -133,6 +134,12 @@ export default function AddressFormModal({ isOpen, onClose, address = null }) {
     if (!result.success) {
       setError(result.message);
       return;
+    }
+
+    if (isEditing) {
+      toast.success("Address updated successfully");
+    } else {
+      toast.success("Address added successfully");
     }
 
     onClose();

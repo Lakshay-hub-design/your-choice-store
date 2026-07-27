@@ -1,11 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { Heart, Loader2 } from "lucide-react";
+
+import { toast } from "sonner";
 
 import useAuthStore from "@/store/authStore";
 import useWishlistStore from "@/store/wishlistStore";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { getLoginUrl } from "@/lib/authRedirect";
 
 export default function WishlistButton({
   productId,
@@ -15,6 +20,11 @@ export default function WishlistButton({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const query = searchParams.toString();
+
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
 
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -44,7 +54,7 @@ export default function WishlistButton({
     }
 
     if (!user) {
-      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+      router.push(getLoginUrl(currentUrl));
 
       return;
     }
@@ -54,8 +64,10 @@ export default function WishlistButton({
     try {
       if (isWishlisted) {
         await removeItem(productId);
+        toast.success("Removed from wishlist");
       } else {
         await addItem(productId);
+        toast.success("Added to wishlist");
       }
     } finally {
       setIsUpdating(false);

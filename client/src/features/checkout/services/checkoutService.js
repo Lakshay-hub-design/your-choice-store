@@ -4,6 +4,10 @@ export const getCheckoutSummary = () => {
   return api.get("/checkout");
 };
 
-export const placeOrder = (data) => {
-  return api.post("/orders", data);
+export const placeOrder = (data, idempotencyKey) => {
+  return api.post("/orders", data, {
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
+  });
 };

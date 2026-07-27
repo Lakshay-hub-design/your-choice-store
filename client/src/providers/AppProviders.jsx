@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 
 import AuthInitializer from "./AuthInitializer";
 import CartInitializer from "./CartInitializer";
@@ -31,6 +32,8 @@ export default function AppProviders({ children }) {
       <WishlistInitializer />
 
       {children}
+
+      <Toaster position="top-right" richColors closeButton />
     </QueryClientProvider>
   );
 }
