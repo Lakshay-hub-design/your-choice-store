@@ -2,6 +2,7 @@ import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import ApiError from "../utils/ApiError.js";
 import { deleteImages, uploadImage } from "./image.service.js";
+import mongoose from "mongoose";
 
 const findProductById = async (id) => {
   const product = await Product.findById(id);
@@ -11,6 +12,10 @@ const findProductById = async (id) => {
   }
 
   return product;
+};
+
+const escapeRegex = (value) => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 const createProduct = async (productData, files) => {
@@ -260,18 +265,185 @@ const getRelatedProducts = async (productId, categoryId, limit = 4) => {
   return products;
 };
 
-const updateProduct = async (id, updateData) => {
+const updateProduct = async (id, updateData, files = []) => {
   const product = await findProductById(id);
 
   if (!product) {
     throw new ApiError(404, "Product not found");
   }
 
-  Object.assign(product, updateData);
+  /*
+   * --------------------------------
+   * 1. Check duplicate product name
+   * --------------------------------
+   */
 
-  await product.save();
+  if (updateData.name && updateData.name !== product.name) {
+    const existingProduct = await Product.findOne({
+      _id: {
+        $ne: product._id,
+      },
 
-  return product;
+      name: {
+        $regex: new RegExp(`^${escapeRegex(updateData.name)}$`, "i"),
+      },
+    });
+
+    if (existingProduct) {
+      throw new ApiError(409, "Product already exists");
+    }
+  }
+
+  /*
+   * --------------------------------
+   * 2. Check duplicate SKU
+   * --------------------------------
+   */
+
+  if (updateData.sku) {
+    const sku = updateData.sku.toUpperCase();
+
+    const existingSku = await Product.findOne({
+      _id: {
+        $ne: product._id,
+      },
+
+      sku,
+    });
+
+    if (existingSku) {
+      throw new ApiError(409, "SKU already exists");
+    }
+
+    updateData.sku = sku;
+  }
+
+  /*
+   * --------------------------------
+   * 3. Validate category
+   * --------------------------------
+   */
+
+  if (updateData.category) {
+    const category = await Category.findById(updateData.category);
+
+    if (!category || !category.isActive) {
+      throw new ApiError(404, "Category not found");
+    }
+  }
+
+  /*
+   * --------------------------------
+   * 4. Determine removed images
+   * --------------------------------
+   */
+
+  const removedImageIds = Array.isArray(updateData.removedImages) ? updateData.removedImages : [];
+
+  /*
+   * Only allow removal of images that
+   * actually belong to this product.
+   */
+
+  const imagesToRemove = product.images.filter((image) => removedImageIds.includes(image.fileId));
+
+  const remainingImages = product.images.filter((image) => !removedImageIds.includes(image.fileId));
+
+  /*
+   * removedImages is request metadata,
+   * not part of Product schema.
+   */
+
+  delete updateData.removedImages;
+
+  /*
+   * --------------------------------
+   * 5. Upload new images
+   * --------------------------------
+   */
+
+  const uploadedImages = [];
+
+  try {
+    for (const file of files) {
+      const image = await uploadImage(file, "/products");
+
+      uploadedImages.push(image);
+    }
+
+    /*
+     * --------------------------------
+     * 6. Build final image list
+     * --------------------------------
+     */
+
+    const finalImages = [
+      ...remainingImages.map((image) => (image.toObject ? image.toObject() : image)),
+
+      ...uploadedImages,
+    ];
+
+    if (!finalImages.length) {
+      throw new ApiError(400, "Product must have at least one image");
+    }
+
+    /*
+     * --------------------------------
+     * 7. Update product
+     * --------------------------------
+     */
+
+    Object.assign(product, updateData);
+
+    product.images = finalImages;
+
+    await product.save();
+
+    /*
+     * --------------------------------
+     * 8. Delete removed images
+     * --------------------------------
+     *
+     * Do this AFTER MongoDB save succeeds.
+     */
+
+    if (imagesToRemove.length) {
+      try {
+        await deleteImages(imagesToRemove.map((image) => image.fileId));
+      } catch (error) {
+        /*
+         * Don't fail the whole request.
+         *
+         * MongoDB already contains the
+         * correct product state.
+         *
+         * These would only be orphaned
+         * storage files.
+         */
+        console.error("Unable to delete removed product images:", error);
+      }
+    }
+
+    return product.populate("category", "name slug");
+  } catch (error) {
+    /*
+     * If updating the product failed,
+     * delete only newly uploaded images.
+     *
+     * Existing product images have NOT
+     * been deleted yet.
+     */
+
+    if (uploadedImages.length) {
+      try {
+        await deleteImages(uploadedImages.map((image) => image.fileId));
+      } catch (cleanupError) {
+        console.error("Unable to clean up newly uploaded images:", cleanupError);
+      }
+    }
+
+    throw error;
+  }
 };
 
 const deleteProduct = async (id) => {
@@ -288,6 +460,160 @@ const deleteProduct = async (id) => {
   return product;
 };
 
+const getAdminProducts = async (query) => {
+  const { page = 1, limit = 20, search, category, status, stock, sort = "newest" } = query;
+
+  const pageNumber = Math.max(Number(page) || 1, 1);
+
+  const limitNumber = Math.min(Math.max(Number(limit) || 20, 1), 100);
+
+  const skip = (pageNumber - 1) * limitNumber;
+
+  const filter = {};
+
+  /*
+   * Search
+   */
+  if (search?.trim()) {
+    const searchValue = search.trim();
+
+    filter.$or = [
+      {
+        name: {
+          $regex: searchValue,
+          $options: "i",
+        },
+      },
+      {
+        sku: {
+          $regex: searchValue,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  /*
+   * Category
+   */
+  if (category && mongoose.Types.ObjectId.isValid(category)) {
+    filter.category = category;
+  }
+
+  /*
+   * Product status
+   */
+  if (status === "active") {
+    filter.isActive = true;
+  }
+
+  if (status === "inactive") {
+    filter.isActive = false;
+  }
+
+  /*
+   * Inventory
+   */
+  if (stock === "out") {
+    filter.stock = {
+      $lte: 0,
+    };
+  }
+
+  if (stock === "low") {
+    filter.stock = {
+      $gt: 0,
+      $lte: 5,
+    };
+  }
+
+  if (stock === "inStock") {
+    filter.stock = {
+      $gt: 0,
+    };
+  }
+
+  /*
+   * Sorting
+   */
+  const sortOptions = {
+    newest: {
+      createdAt: -1,
+    },
+
+    oldest: {
+      createdAt: 1,
+    },
+
+    nameAsc: {
+      name: 1,
+    },
+
+    nameDesc: {
+      name: -1,
+    },
+
+    priceAsc: {
+      price: 1,
+    },
+
+    priceDesc: {
+      price: -1,
+    },
+
+    stockAsc: {
+      stock: 1,
+    },
+
+    stockDesc: {
+      stock: -1,
+    },
+  };
+
+  const sortQuery = sortOptions[sort] || sortOptions.newest;
+
+  const [products, totalProducts] = await Promise.all([
+    Product.find(filter)
+      .populate("category", "name slug")
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limitNumber),
+
+    Product.countDocuments(filter),
+  ]);
+
+  const totalPages = Math.ceil(totalProducts / limitNumber);
+
+  return {
+    products,
+
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      totalProducts,
+      totalPages,
+
+      hasNextPage: pageNumber < totalPages,
+
+      hasPrevPage: pageNumber > 1,
+    },
+  };
+};
+
+const getAdminProductById = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid product ID");
+  }
+
+  const product = await Product.findById(id).populate("category", "name slug");
+
+  if (!product) {
+    throw new ApiError(404, "Product not found");
+  }
+
+  return product;
+};
+
 const productService = {
   createProduct,
   getAllProducts,
@@ -295,6 +621,8 @@ const productService = {
   getRelatedProducts,
   updateProduct,
   deleteProduct,
+  getAdminProducts,
+  getAdminProductById,
 };
 
 export default productService;

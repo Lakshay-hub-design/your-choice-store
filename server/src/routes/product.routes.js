@@ -12,11 +12,7 @@ import {
 import validate from "../middlewares/validate.js";
 import upload from "../middlewares/upload.js";
 
-import { createProductSchema } from "../validators/product.validator.js";
-
 const router = express.Router();
-
-router.post("/", upload.array("productImages", 8), validate(createProductSchema), createProduct);
 
 router.get("/", getAllProducts);
 

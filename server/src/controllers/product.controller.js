@@ -5,7 +5,7 @@ import productService from "../services/product.service.js";
 const createProduct = asyncHandler(async (req, res) => {
   const product = await productService.createProduct(req.body, req.files);
 
-  return res.status(201).json(new ApiResponse(201, "Product created succesfully", product));
+  return res.status(201).json(new ApiResponse(201, "Product created successfully", product));
 });
 
 const getAllProducts = asyncHandler(async (req, res) => {
@@ -42,6 +42,18 @@ const deleteProduct = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Product deleted successfully"));
 });
 
+const getAdminProducts = asyncHandler(async (req, res) => {
+  const result = await productService.getAdminProducts(req.query);
+
+  return res.status(200).json(new ApiResponse(200, "Admin products fetched successfully", result));
+});
+
+const getAdminProductById = asyncHandler(async (req, res) => {
+  const product = await productService.getAdminProductById(req.params.id);
+
+  return res.status(200).json(new ApiResponse(200, "Product fetched successfully", product));
+});
+
 export {
   createProduct,
   getAllProducts,
@@ -49,4 +61,6 @@ export {
   getRelatedProducts,
   updateProduct,
   deleteProduct,
+  getAdminProducts,
+  getAdminProductById,
 };

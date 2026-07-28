@@ -57,6 +57,7 @@ import cartRoutes from "./routes/cart.routes.js";
 import wishlistRoutes from "./routes/wishlist.routes.js";
 import checkoutRoutes from "./routes/checkout.routes.js";
 import orderRoutes from "./routes/order.routes.js";
+import adminProductRoutes from "./routes/admin/product.routes.js";
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
@@ -66,6 +67,8 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders", orderRoutes);
+
+app.use("/api/admin/products", adminProductRoutes);
 
 app.use(notFound);
 app.use(errorMiddleware);
