@@ -66,4 +66,43 @@ const cancelOrder = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Order cancelled successfully", order));
 });
 
-export { placeOrder, getOrderById, getUserOrders, cancelOrder };
+const getAdminOrders = asyncHandler(async (req, res) => {
+  const result = await orderService.getAdminOrders(req.query);
+
+  return res.status(200).json(new ApiResponse(200, "Orders fetched successfully", result));
+});
+
+const getAdminOrderById = asyncHandler(async (req, res) => {
+  const order = await orderService.getAdminOrderById(req.params.id);
+
+  return res.status(200).json(new ApiResponse(200, "Order fetched successfully", order));
+});
+
+const updateAdminOrderStatus = asyncHandler(async (req, res) => {
+  const order = await orderService.updateAdminOrderStatus({
+    orderId: req.params.id,
+    status: req.body.status,
+  });
+
+  return res.status(200).json(new ApiResponse(200, "Order status updated successfully", order));
+});
+
+const cancelAdminOrder = asyncHandler(async (req, res) => {
+  const order = await orderService.cancelAdminOrder({
+    orderId: req.params.id,
+    reason: req.body.reason,
+  });
+
+  return res.status(200).json(new ApiResponse(200, "Order cancelled successfully", order));
+});
+
+export {
+  placeOrder,
+  getOrderById,
+  getUserOrders,
+  cancelOrder,
+  getAdminOrders,
+  getAdminOrderById,
+  updateAdminOrderStatus,
+  cancelAdminOrder,
+};

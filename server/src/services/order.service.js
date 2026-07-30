@@ -416,11 +416,338 @@ const cancelOrder = async ({ userId, orderId, reason = "" }) => {
   }
 };
 
+const getAdminOrders = async (query = {}) => {
+  const {
+    page = 1,
+    limit = 20,
+    search = "",
+    status = "",
+    paymentStatus = "",
+    paymentMethod = "",
+    sort = "newest",
+  } = query;
+
+  const pageNumber = Math.max(Number(page) || 1, 1);
+
+  const limitNumber = Math.min(Math.max(Number(limit) || 20, 1), 100);
+
+  const skip = (pageNumber - 1) * limitNumber;
+
+  const filter = {};
+
+  /*
+   * Search
+   *
+   * For now search by order number.
+   * Customer search is discussed below.
+   */
+  if (search?.trim()) {
+    const searchValue = search.trim();
+
+    filter.orderNumber = {
+      $regex: searchValue,
+      $options: "i",
+    };
+  }
+
+  /*
+   * Order status
+   */
+  if (status && Object.values(ORDER_STATUS).includes(status)) {
+    filter.orderStatus = status;
+  }
+
+  /*
+   * Payment status
+   */
+  const validPaymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED"];
+
+  if (paymentStatus && validPaymentStatuses.includes(paymentStatus)) {
+    filter.paymentStatus = paymentStatus;
+  }
+
+  /*
+   * Payment method
+   */
+  const validPaymentMethods = ["COD", "ONLINE"];
+
+  if (paymentMethod && validPaymentMethods.includes(paymentMethod)) {
+    filter.paymentMethod = paymentMethod;
+  }
+
+  /*
+   * Sorting
+   */
+  const sortOptions = {
+    newest: {
+      createdAt: -1,
+    },
+
+    oldest: {
+      createdAt: 1,
+    },
+
+    totalHigh: {
+      "pricing.grandTotal": -1,
+    },
+
+    totalLow: {
+      "pricing.grandTotal": 1,
+    },
+  };
+
+  const sortQuery = sortOptions[sort] || sortOptions.newest;
+
+  /*
+   * Query
+   */
+  const [orders, totalOrders] = await Promise.all([
+    Order.find(filter)
+      .populate("user", "displayName username email phone")
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limitNumber),
+
+    Order.countDocuments(filter),
+  ]);
+
+  const totalPages = Math.ceil(totalOrders / limitNumber);
+
+  return {
+    orders,
+
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+
+      totalOrders,
+      totalPages,
+
+      hasNextPage: pageNumber < totalPages,
+
+      hasPrevPage: pageNumber > 1,
+    },
+  };
+};
+
+const getAdminOrderById = async (orderId) => {
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new ApiError(400, "Invalid order ID");
+  }
+
+  const order = await Order.findById(orderId).populate("user", "displayName username email phone");
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  return order;
+};
+
+const updateAdminOrderStatus = async ({ orderId, status }) => {
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new ApiError(400, "Invalid order ID");
+  }
+
+  const validTransitions = {
+    [ORDER_STATUS.PLACED]: [ORDER_STATUS.CONFIRMED],
+
+    [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.PROCESSING],
+
+    [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPED],
+
+    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED],
+
+    [ORDER_STATUS.DELIVERED]: [],
+
+    [ORDER_STATUS.CANCELLED]: [],
+  };
+
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (!Object.values(ORDER_STATUS).includes(status)) {
+    throw new ApiError(400, "Invalid order status");
+  }
+
+  const allowedStatuses = validTransitions[order.orderStatus] || [];
+
+  if (!allowedStatuses.includes(status)) {
+    throw new ApiError(400, `Order cannot be changed from ${order.orderStatus} to ${status}`);
+  }
+
+  const changedAt = new Date();
+
+  order.orderStatus = status;
+
+  order.statusHistory.push({
+    status,
+    timestamp: changedAt,
+  });
+
+  if (status === ORDER_STATUS.DELIVERED) {
+    order.deliveredAt = changedAt;
+
+    /*
+     * COD becomes paid when delivered.
+     */
+    if (order.paymentMethod === "COD") {
+      order.paymentStatus = "PAID";
+    }
+  }
+
+  await order.save();
+
+  return order.populate("user", "displayName username email phone");
+};
+
+const cancelAdminOrder = async ({ orderId, reason = "" }) => {
+  if (!mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new ApiError(400, "Invalid order ID");
+  }
+
+  const cancellationReason = reason.trim();
+
+  if (!cancellationReason) {
+    throw new ApiError(400, "Cancellation reason is required");
+  }
+
+  if (cancellationReason.length > 500) {
+    throw new ApiError(400, "Cancellation reason cannot exceed 500 characters");
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    /*
+     * Only these statuses can be cancelled
+     * by the admin.
+     */
+    const cancellableStatuses = [
+      ORDER_STATUS.PLACED,
+      ORDER_STATUS.CONFIRMED,
+      ORDER_STATUS.PROCESSING,
+    ];
+
+    if (!cancellableStatuses.includes(order.orderStatus)) {
+      throw new ApiError(400, `Order cannot be cancelled when status is ${order.orderStatus}`);
+    }
+
+    /*
+     * Don't cancel paid online orders
+     * until refund handling is implemented.
+     */
+    if (order.paymentMethod === "ONLINE" && order.paymentStatus === "PAID") {
+      throw new ApiError(400, "Paid online orders require a refund before cancellation");
+    }
+
+    /*
+     * Restore inventory and reverse
+     * sold count.
+     */
+    const stockUpdates = order.items.map((item) => ({
+      updateOne: {
+        filter: {
+          _id: item.product,
+        },
+
+        update: {
+          $inc: {
+            stock: item.quantity,
+            sold: -item.quantity,
+          },
+        },
+      },
+    }));
+
+    if (stockUpdates.length > 0) {
+      await Product.bulkWrite(stockUpdates, {
+        session,
+      });
+    }
+
+    /*
+     * Update order.
+     */
+    const cancelledAt = new Date();
+
+    order.orderStatus = ORDER_STATUS.CANCELLED;
+
+    order.cancellationReason = cancellationReason;
+
+    order.cancelledAt = cancelledAt;
+
+    order.statusHistory.push({
+      status: ORDER_STATUS.CANCELLED,
+
+      timestamp: cancelledAt,
+    });
+
+    await order.save({
+      session,
+    });
+
+    /*
+     * Save ID before finishing transaction.
+     */
+    const cancelledOrderId = order._id;
+
+    /*
+     * Commit database changes.
+     */
+    await session.commitTransaction();
+
+    /*
+     * IMPORTANT:
+     *
+     * Don't populate `order` here because
+     * it is attached to the transaction
+     * session.
+     *
+     * Fetch a fresh document without
+     * the transaction session instead.
+     */
+    const updatedOrder = await Order.findById(cancelledOrderId).populate(
+      "user",
+      "displayName username email phone"
+    );
+
+    return updatedOrder;
+  } catch (error) {
+    /*
+     * Only abort if the transaction
+     * is still active.
+     */
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+};
+
 const orderService = {
   placeCODOrder,
   getOrderById,
   getUserOrders,
   cancelOrder,
+  getAdminOrders,
+  getAdminOrderById,
+  updateAdminOrderStatus,
+  cancelAdminOrder,
 };
 
 export default orderService;
