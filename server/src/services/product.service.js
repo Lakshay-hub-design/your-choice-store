@@ -90,6 +90,7 @@ const getAllProducts = async (query) => {
 
   const filter = {
     isActive: true,
+    isArchived: false,
   };
 
   // Search
@@ -235,6 +236,7 @@ const getProductBySlug = async (slug) => {
   const product = await Product.findOne({
     slug,
     isActive: true,
+    isArchived: false,
   }).populate("category", "name slug");
 
   if (!product) {
@@ -251,6 +253,7 @@ const getRelatedProducts = async (productId, categoryId, limit = 4) => {
     },
     category: categoryId,
     isActive: true,
+    isArchived: false,
     stock: {
       $gt: 0,
     },
@@ -461,7 +464,16 @@ const deleteProduct = async (id) => {
 };
 
 const getAdminProducts = async (query) => {
-  const { page = 1, limit = 20, search, category, status, stock, sort = "newest" } = query;
+  const {
+    page = 1,
+    limit = 20,
+    search,
+    category,
+    status,
+    stock,
+    sort = "newest",
+    archived = "false",
+  } = query;
 
   const pageNumber = Math.max(Number(page) || 1, 1);
 
@@ -469,7 +481,18 @@ const getAdminProducts = async (query) => {
 
   const skip = (pageNumber - 1) * limitNumber;
 
-  const filter = {};
+  /*
+   * Archive status
+   *
+   * Normal admin products:
+   * ?archived=false
+   *
+   * Archived products:
+   * ?archived=true
+   */
+  const filter = {
+    isArchived: archived === "true",
+  };
 
   /*
    * Search
@@ -589,8 +612,11 @@ const getAdminProducts = async (query) => {
 
     pagination: {
       page: pageNumber,
+
       limit: limitNumber,
+
       totalProducts,
+
       totalPages,
 
       hasNextPage: pageNumber < totalPages,
@@ -614,6 +640,77 @@ const getAdminProductById = async (id) => {
   return product;
 };
 
+const updateProductStatus = async (id, isActive) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid product ID");
+  }
+
+  if (typeof isActive !== "boolean") {
+    throw new ApiError(400, "isActive must be a boolean");
+  }
+
+  const product = await Product.findById(id);
+
+  if (!product) {
+    throw new ApiError(404, "Product not found");
+  }
+
+  product.isActive = isActive;
+
+  await product.save();
+
+  return product;
+};
+
+const archiveProduct = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid product ID");
+  }
+
+  const product = await Product.findById(id);
+
+  if (!product) {
+    throw new ApiError(404, "Product not found");
+  }
+
+  if (product.isArchived) {
+    throw new ApiError(400, "Product is already archived");
+  }
+
+  product.isArchived = true;
+  product.isActive = false;
+
+  await product.save();
+
+  return product;
+};
+
+const restoreProduct = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new ApiError(400, "Invalid product ID");
+  }
+
+  const product = await Product.findById(id);
+
+  if (!product) {
+    throw new ApiError(404, "Product not found");
+  }
+
+  if (!product.isArchived) {
+    throw new ApiError(400, "Product is not archived");
+  }
+
+  product.isArchived = false;
+
+  // Restore as inactive so the admin can review it
+  // before making it visible on the storefront.
+  product.isActive = false;
+
+  await product.save();
+
+  return product.populate("category", "name slug");
+};
+
 const productService = {
   createProduct,
   getAllProducts,
@@ -623,6 +720,9 @@ const productService = {
   deleteProduct,
   getAdminProducts,
   getAdminProductById,
+  updateProductStatus,
+  archiveProduct,
+  restoreProduct,
 };
 
 export default productService;

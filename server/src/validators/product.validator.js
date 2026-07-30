@@ -140,3 +140,13 @@ export const updateProductSchema = z.object({
     id: z.string().trim().min(1, "Product ID is required"),
   }),
 });
+
+export const updateProductStatusSchema = z.object({
+  body: z.object({
+    isActive: z.boolean(),
+  }),
+
+  params: z.object({
+    id: z.string().trim().min(1, "Product ID is required"),
+  }),
+});

@@ -147,6 +147,11 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -176,6 +181,8 @@ productSchema.index({ isBestSeller: 1 });
 productSchema.index({ isActive: 1 });
 
 productSchema.index({ tags: 1 });
+
+productSchema.index({ isArchived: 1 });
 
 const Product = mongoose.model("Product", productSchema);
 

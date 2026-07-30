@@ -54,6 +54,32 @@ const getAdminProductById = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Product fetched successfully", product));
 });
 
+const updateProductStatus = asyncHandler(async (req, res) => {
+  const product = await productService.updateProductStatus(req.params.id, req.body.isActive);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        product.isActive ? "Product activated successfully" : "Product deactivated successfully",
+        product
+      )
+    );
+});
+
+const archiveProduct = asyncHandler(async (req, res) => {
+  const product = await productService.archiveProduct(req.params.id);
+
+  return res.status(200).json(new ApiResponse(200, "Product archived successfully", product));
+});
+
+const restoreProduct = asyncHandler(async (req, res) => {
+  const product = await productService.restoreProduct(req.params.id);
+
+  return res.status(200).json(new ApiResponse(200, "Product restored successfully", product));
+});
+
 export {
   createProduct,
   getAllProducts,
@@ -63,4 +89,7 @@ export {
   deleteProduct,
   getAdminProducts,
   getAdminProductById,
+  updateProductStatus,
+  archiveProduct,
+  restoreProduct,
 };
