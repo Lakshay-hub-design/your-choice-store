@@ -43,6 +43,11 @@ const categorySchema = new mongoose.Schema(
       default: true,
     },
 
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
+
     displayOrder: {
       type: Number,
       default: 0,
@@ -66,6 +71,13 @@ const categorySchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+    },
+
+    toObject: {
+      virtuals: true,
+    },
   }
 );
 
@@ -74,11 +86,24 @@ categorySchema.index({
 });
 
 categorySchema.index({
-  isFeatured: 1,
+  name: 1,
 });
 
 categorySchema.index({
   isActive: 1,
+  isArchived: 1,
+});
+
+categorySchema.index({
+  displayOrder: 1,
+});
+
+categorySchema.index({
+  parentCategory: 1,
+});
+
+categorySchema.index({
+  isFeatured: 1,
 });
 
 categorySchema.pre("save", function () {
@@ -88,6 +113,13 @@ categorySchema.pre("save", function () {
       strict: true,
     });
   }
+});
+
+categorySchema.virtual("productCount", {
+  ref: "Product",
+  localField: "_id",
+  foreignField: "category",
+  count: true,
 });
 
 const Category = mongoose.model("Category", categorySchema);

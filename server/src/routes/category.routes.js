@@ -2,10 +2,13 @@ import express from "express";
 
 import {
   createCategory,
-  getAllCategories,
+  getActiveCategories,
   getCategoryBySlug,
   updateCategory,
-  deleteCategory,
+  getAdminCategories,
+  toggleCategoryStatus,
+  archiveCategory,
+  restoreCategory,
 } from "../controllers/category.controller.js";
 
 import validate from "../middlewares/validate.js";
@@ -17,12 +20,18 @@ const router = express.Router();
 
 router.post("/", upload.single("categoryImage"), validate(createCategorySchema), createCategory);
 
-router.get("/", getAllCategories);
+router.get("/", getActiveCategories);
+
+router.get("/admin-categories", getAdminCategories);
 
 router.get("/:slug", getCategoryBySlug);
 
 router.patch("/:id", updateCategory);
 
-router.delete("/:id", deleteCategory);
+router.patch("/:id/status", toggleCategoryStatus);
+
+router.patch("/:id/archive", archiveCategory);
+
+router.patch("/:id/restore", restoreCategory);
 
 export default router;
