@@ -114,6 +114,7 @@ const getActiveCategories = async () => {
 };
 
 const getCategoryById = async (id) => {
+  console.log("getCategoryById called with id:", id);
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new ApiError(400, "Invalid category ID.");
   }

@@ -3,6 +3,7 @@ import express from "express";
 import {
   createCategory,
   getActiveCategories,
+  getCategoryById,
   getCategoryBySlug,
   updateCategory,
   getAdminCategories,
@@ -18,13 +19,15 @@ import { createCategorySchema } from "../validators/category.validator.js";
 
 const router = express.Router();
 
-router.post("/", upload.single("categoryImage"), validate(createCategorySchema), createCategory);
+router.post("/", upload.single("image"), validate(createCategorySchema), createCategory);
 
 router.get("/", getActiveCategories);
 
 router.get("/admin-categories", getAdminCategories);
 
-router.get("/:slug", getCategoryBySlug);
+router.get("/slug/:slug", getCategoryBySlug);
+
+router.get("/:id", getCategoryById);
 
 router.patch("/:id", updateCategory);
 

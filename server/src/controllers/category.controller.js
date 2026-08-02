@@ -14,6 +14,12 @@ const getActiveCategories = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Categories fetched successfully", categories));
 });
 
+const getCategoryById = asyncHandler(async (req, res) => {
+  const category = await categoryService.getCategoryById(req.params.id);
+
+  return res.status(200).json(new ApiResponse(200, "Category fetched successfully", category));
+});
+
 const getCategoryBySlug = asyncHandler(async (req, res) => {
   const category = await categoryService.getCategoryBySlug(req.params.slug);
 
@@ -55,6 +61,7 @@ const restoreCategory = asyncHandler(async (req, res) => {
 export {
   createCategory,
   getActiveCategories,
+  getCategoryById,
   getCategoryBySlug,
   updateCategory,
   getAdminCategories,
