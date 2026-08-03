@@ -143,7 +143,6 @@ const getCategoryBySlug = async (slug) => {
 
 const updateCategory = async (id, updateData, file) => {
   const category = await getCategoryById(id);
-
   /*
    * Duplicate name check.
    */

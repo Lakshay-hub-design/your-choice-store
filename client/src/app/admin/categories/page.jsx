@@ -98,16 +98,18 @@ export default function AdminCategoriesPage() {
     <div>
       {/* Header */}
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Categories</h1>
+          <h1 className="text-4xl font-bold text-[#111827]">Categories</h1>
 
-          <p className="mt-1 text-sm text-[#6B7280]">Organize your store categories.</p>
+          <p className="mt-2 text-base text-[#6B7280]">
+            Manage and organize your product categories.
+          </p>
         </div>
 
         <Link
           href="/admin/categories/new"
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#FF5A5F] px-5 text-sm font-semibold text-white"
+          className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#FF5A5F] px-5 text-sm font-semibold text-white shadow-md transition hover:bg-[#ff4a50]"
         >
           <Plus size={17} />
           Add Category
