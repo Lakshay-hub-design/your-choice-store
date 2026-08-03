@@ -79,6 +79,11 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
+
     passwordResetTokenExpires: {
       type: Date,
       select: false,

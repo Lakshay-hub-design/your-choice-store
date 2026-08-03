@@ -29,7 +29,7 @@ router.get("/slug/:slug", getCategoryBySlug);
 
 router.get("/:id", getCategoryById);
 
-router.patch("/:id", updateCategory);
+router.patch("/:id", upload.single("image"), updateCategory);
 
 router.patch("/:id/status", toggleCategoryStatus);
 

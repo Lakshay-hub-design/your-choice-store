@@ -61,6 +61,7 @@ import orderRoutes from "./routes/order.routes.js";
 import adminProductRoutes from "./routes/admin/product.routes.js";
 import adminOrderRoutes from "./routes/admin/order.routes.js";
 import adminDashboardRoutes from "./routes/admin/adminDashboard.routes.js";
+import customerRoutes from "./routes/admin/customer.routes.js";
 
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
@@ -74,6 +75,7 @@ app.use("/api/admin/categories", categoryRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/dashboard", adminDashboardRoutes);
+app.use("/api/admin/customers", customerRoutes);
 
 app.use(notFound);
 app.use(errorMiddleware);
