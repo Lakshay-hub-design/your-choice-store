@@ -1,6 +1,7 @@
 import AnnouncementBar from "@/components/storefront/AnnouncementBar";
 import Navbar from "@/components/storefront/Navbar";
 import MobileBottomNav from "@/components/storefront/MobileBottomNav";
+import Footer from "@/components/storefront/footer/Footer";
 
 export default function CartLayout({ children }) {
   return (

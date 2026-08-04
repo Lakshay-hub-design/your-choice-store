@@ -62,7 +62,9 @@ import adminProductRoutes from "./routes/admin/product.routes.js";
 import adminOrderRoutes from "./routes/admin/order.routes.js";
 import adminDashboardRoutes from "./routes/admin/adminDashboard.routes.js";
 import customerRoutes from "./routes/admin/customer.routes.js";
+import adminCategoryRoutes from "./routes/admin/adminCategoryRoutes.js";
 
+app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/addresses", addressRoutes);
@@ -71,7 +73,7 @@ app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders", orderRoutes);
 
-app.use("/api/admin/categories", categoryRoutes);
+app.use("/api/admin/categories", adminCategoryRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/dashboard", adminDashboardRoutes);

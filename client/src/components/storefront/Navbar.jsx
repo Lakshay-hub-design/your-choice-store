@@ -14,7 +14,11 @@ import { getCategories } from "@/features/categories/services/categoryService";
 
 import { getLoginUrl } from "@/lib/authRedirect";
 
-export default function Navbar() {
+export default function Navbar({
+  showSearch = true,
+  showCategoryDropdown = true,
+  showActions = true,
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -162,141 +166,144 @@ export default function Navbar() {
             <Logo />
 
             {/* Search */}
+            {showSearch && (
+              <form onSubmit={handleSearch} className="flex min-w-0 flex-1">
+                <div className="flex w-full rounded-xl border border-[#EDE9E6] bg-white transition focus-within:border-[#FF5A5F]/50 focus-within:ring-2 focus-within:ring-[#FF5A5F]/10">
+                  {/* Categories */}
+                  {showCategoryDropdown && (
+                    <div className="relative shrink-0 border-r border-[#EDE9E6]">
+                      <button
+                        type="button"
+                        onClick={() => setCategoryMenuOpen((current) => !current)}
+                        className={`flex h-full max-w-[190px] items-center gap-2 rounded-l-xl px-4 text-xs font-medium transition ${
+                          categoryMenuOpen
+                            ? "bg-[#FFF9F5] text-[#FF5A5F]"
+                            : "text-[#242424] hover:bg-[#FFF9F5]"
+                        }`}
+                      >
+                        <span className="truncate">
+                          {selectedCategory?.name || "All Categories"}
+                        </span>
 
-            <form onSubmit={handleSearch} className="flex min-w-0 flex-1">
-              <div className="flex w-full rounded-xl border border-[#EDE9E6] bg-white transition focus-within:border-[#FF5A5F]/50 focus-within:ring-2 focus-within:ring-[#FF5A5F]/10">
-                {/* Categories */}
-
-                <div className="relative shrink-0 border-r border-[#EDE9E6]">
-                  <button
-                    type="button"
-                    onClick={() => setCategoryMenuOpen((current) => !current)}
-                    className={`flex h-full max-w-[190px] items-center gap-2 rounded-l-xl px-4 text-xs font-medium transition ${
-                      categoryMenuOpen
-                        ? "bg-[#FFF9F5] text-[#FF5A5F]"
-                        : "text-[#242424] hover:bg-[#FFF9F5]"
-                    }`}
-                  >
-                    <span className="truncate">{selectedCategory?.name || "All Categories"}</span>
-
-                    <ChevronDown
-                      size={14}
-                      className={`shrink-0 transition-transform duration-200 ${
-                        categoryMenuOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {/* Dropdown */}
-
-                  {categoryMenuOpen && (
-                    <div className="absolute top-full left-0 z-[100] mt-3 w-[300px] overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white shadow-[0_18px_50px_rgba(36,36,36,0.14)]">
-                      {/* Header */}
-                      <div className="border-b border-[#EDE9E6] px-4 py-3">
-                        <p className="text-[10px] font-bold tracking-[0.12em] text-[#9CA3AF] uppercase">
-                          Shop by Category
-                        </p>
-                      </div>
-
-                      {/* Categories */}
-                      <div className="max-h-[360px] [scrollbar-width:thin] overflow-y-auto p-2">
-                        {/* All Products */}
-                        <button
-                          type="button"
-                          onClick={() => handleCategorySelect("")}
-                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                            !currentCategoryId
-                              ? "bg-[#FF5A5F]/10 font-semibold text-[#FF5A5F]"
-                              : "font-medium text-[#242424] hover:bg-[#FFF9F5] hover:text-[#FF5A5F]"
+                        <ChevronDown
+                          size={14}
+                          className={`shrink-0 transition-transform duration-200 ${
+                            categoryMenuOpen ? "rotate-180" : ""
                           }`}
-                        >
-                          <span>All Products</span>
+                        />
+                      </button>
 
-                          {!currentCategoryId && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#FF5A5F]" />
-                          )}
-                        </button>
+                      {/* Dropdown */}
 
-                        {/* Dynamic Categories */}
-                        {categories.length > 0 ? (
-                          categories.map((category) => {
-                            const active = currentCategoryId === category._id;
-
-                            return (
-                              <button
-                                key={category._id}
-                                type="button"
-                                onClick={() => handleCategorySelect(category._id)}
-                                className={`mt-0.5 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
-                                  active
-                                    ? "bg-[#FF5A5F]/10 font-semibold text-[#FF5A5F]"
-                                    : "text-[#242424] hover:bg-[#FFF9F5] hover:text-[#FF5A5F]"
-                                }`}
-                              >
-                                <span className="truncate">{category.name}</span>
-
-                                {active && (
-                                  <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF5A5F]" />
-                                )}
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="px-3 py-6 text-center">
-                            <p className="text-xs text-[#9CA3AF]">No categories available</p>
+                      {categoryMenuOpen && (
+                        <div className="absolute top-full left-0 z-[100] mt-3 w-[300px] overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white shadow-[0_18px_50px_rgba(36,36,36,0.14)]">
+                          {/* Header */}
+                          <div className="border-b border-[#EDE9E6] px-4 py-3">
+                            <p className="text-[10px] font-bold tracking-[0.12em] text-[#9CA3AF] uppercase">
+                              Shop by Category
+                            </p>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Footer */}
-                      <div className="border-t border-[#EDE9E6] bg-[#FFF9F5]/60 p-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            router.push("/products");
-                            setCategoryMenuOpen(false);
-                          }}
-                          className="w-full rounded-xl px-3 py-2 text-center text-xs font-semibold text-[#FF5A5F] transition hover:bg-[#FF5A5F]/10"
-                        >
-                          View All Products
-                        </button>
-                      </div>
+                          {/* Categories */}
+                          <div className="max-h-[360px] [scrollbar-width:thin] overflow-y-auto p-2">
+                            {/* All Products */}
+                            <button
+                              type="button"
+                              onClick={() => handleCategorySelect("")}
+                              className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                                !currentCategoryId
+                                  ? "bg-[#FF5A5F]/10 font-semibold text-[#FF5A5F]"
+                                  : "font-medium text-[#242424] hover:bg-[#FFF9F5] hover:text-[#FF5A5F]"
+                              }`}
+                            >
+                              <span>All Products</span>
+
+                              {!currentCategoryId && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#FF5A5F]" />
+                              )}
+                            </button>
+
+                            {/* Dynamic Categories */}
+                            {categories.length > 0 ? (
+                              categories.map((category) => {
+                                const active = currentCategoryId === category._id;
+
+                                return (
+                                  <button
+                                    key={category._id}
+                                    type="button"
+                                    onClick={() => handleCategorySelect(category._id)}
+                                    className={`mt-0.5 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                                      active
+                                        ? "bg-[#FF5A5F]/10 font-semibold text-[#FF5A5F]"
+                                        : "text-[#242424] hover:bg-[#FFF9F5] hover:text-[#FF5A5F]"
+                                    }`}
+                                  >
+                                    <span className="truncate">{category.name}</span>
+
+                                    {active && (
+                                      <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FF5A5F]" />
+                                    )}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="px-3 py-6 text-center">
+                                <p className="text-xs text-[#9CA3AF]">No categories available</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div className="border-t border-[#EDE9E6] bg-[#FFF9F5]/60 p-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                router.push("/products");
+                                setCategoryMenuOpen(false);
+                              }}
+                              className="w-full rounded-xl px-3 py-2 text-center text-xs font-semibold text-[#FF5A5F] transition hover:bg-[#FF5A5F]/10"
+                            >
+                              View All Products
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
+                  {/* Search input */}
+
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search for gifts, toys and more..."
+                    className="min-w-0 flex-1 px-4 py-3 text-sm text-[#242424] outline-none placeholder:text-[#9CA3AF]"
+                  />
+
+                  <button
+                    type="submit"
+                    className="flex w-14 shrink-0 items-center justify-center rounded-r-xl bg-[#FF5A5F] text-white transition hover:bg-[#f1494e]"
+                    aria-label="Search"
+                  >
+                    <Search size={19} />
+                  </button>
                 </div>
-
-                {/* Search input */}
-
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search for gifts, toys and more..."
-                  className="min-w-0 flex-1 px-4 py-3 text-sm text-[#242424] outline-none placeholder:text-[#9CA3AF]"
-                />
-
-                <button
-                  type="submit"
-                  className="flex w-14 shrink-0 items-center justify-center rounded-r-xl bg-[#FF5A5F] text-white transition hover:bg-[#f1494e]"
-                  aria-label="Search"
-                >
-                  <Search size={19} />
-                </button>
-              </div>
-            </form>
-
+              </form>
+            )}
             {/* Right side */}
+            {showActions && (
+              <div className="flex items-center gap-6">
+                <WishlistLink wishlistCount={wishlistCount} user={user} />
 
-            <div className="flex items-center gap-6">
-              <WishlistLink wishlistCount={wishlistCount} user={user} />
+                <CartLink cartCount={cartCount} user={user} />
 
-              <CartLink cartCount={cartCount} user={user} />
-
-              <NavIcon
-                href={user ? "/account" : "/login"}
-                icon={<UserRound size={21} />}
-                label={user ? "Account" : "Login"}
-              />
-            </div>
+                <NavIcon
+                  href={user ? "/account" : "/login"}
+                  icon={<UserRound size={21} />}
+                  label={user ? "Account" : "Login"}
+                />
+              </div>
+            )}
           </div>
 
           {/* =========================
