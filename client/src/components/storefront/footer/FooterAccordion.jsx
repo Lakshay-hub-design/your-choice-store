@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import Link from "next/link";
 
-import { ChevronDown, Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
+import { ChevronDown, Instagram, Mail, MapPin, Phone } from "lucide-react";
+import { FaFacebook, FaInstagram } from "react-icons/fa";
 
 const sections = [
   {
@@ -107,11 +108,11 @@ export default function FooterAccordion() {
 
         <div className="mt-6 flex gap-3">
           <SocialIcon href="#">
-            <Facebook size={18} />
+            <FaFacebook size={18} />
           </SocialIcon>
 
           <SocialIcon href="#">
-            <Instagram size={18} />
+            <FaInstagram size={18} />
           </SocialIcon>
 
           <SocialIcon href="#">

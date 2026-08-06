@@ -7,7 +7,8 @@ import { STORE } from "@/config/store";
 
 import Link from "next/link";
 
-import { Facebook, Instagram, Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin, Phone } from "lucide-react";
+import { FaFacebook, FaInstagram } from "react-icons/fa";
 
 export default function Footer() {
   return (
@@ -37,11 +38,11 @@ export default function Footer() {
 
             <div className="mt-6 flex items-center gap-4">
               <SocialIcon href="#">
-                <Facebook size={18} />
+                <FaFacebook size={18} />
               </SocialIcon>
 
               <SocialIcon href="#">
-                <Instagram size={18} />
+                <FaInstagram size={18} />
               </SocialIcon>
 
               <SocialIcon href="#">
