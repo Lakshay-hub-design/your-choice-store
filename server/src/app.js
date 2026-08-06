@@ -63,6 +63,7 @@ import adminOrderRoutes from "./routes/admin/order.routes.js";
 import adminDashboardRoutes from "./routes/admin/adminDashboard.routes.js";
 import customerRoutes from "./routes/admin/customer.routes.js";
 import adminCategoryRoutes from "./routes/admin/adminCategoryRoutes.js";
+import reviewRoutes from "./routes/review.routes.js";
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
@@ -72,6 +73,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 app.use("/api/admin/categories", adminCategoryRoutes);
 app.use("/api/admin/products", adminProductRoutes);
