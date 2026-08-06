@@ -299,15 +299,65 @@ const getUserOrders = async ({ userId, page = 1, limit = 10, status }) => {
     Order.countDocuments(filter),
   ]);
 
+  /*
+   * Get all product ids from current page
+   */
+  const productIds = orders.flatMap((order) => order.items.map((item) => item.product.toString()));
+
+  /*
+   * Get all reviews for these products by this user
+   */
+  const reviews = await Review.find({
+    user: userId,
+    product: {
+      $in: productIds,
+    },
+  }).select("_id product");
+
+  /*
+   * Create lookup map
+   */
+  const reviewMap = new Map();
+
+  reviews.forEach((review) => {
+    reviewMap.set(review.product.toString(), review);
+  });
+
+  /*
+   * Enrich each order item
+   */
+  const enrichedOrders = orders.map((order) => {
+    const orderObject = order.toObject();
+
+    orderObject.items = orderObject.items.map((item) => {
+      const review = reviewMap.get(item.product.toString());
+
+      item.review = {
+        canReview: order.orderStatus === ORDER_STATUS.DELIVERED && !review,
+
+        hasReviewed: !!review,
+
+        reviewId: review?._id || null,
+      };
+
+      return item;
+    });
+
+    return orderObject;
+  });
+
   const totalPages = Math.ceil(totalOrders / limitNumber);
 
   return {
-    orders,
+    orders: enrichedOrders,
 
     pagination: {
       page: pageNumber,
+
       limit: limitNumber,
+
       totalOrders,
+
       totalPages,
 
       hasNextPage: pageNumber < totalPages,
