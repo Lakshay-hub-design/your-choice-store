@@ -312,7 +312,7 @@ const getUserOrders = async ({ userId, page = 1, limit = 10, status }) => {
     product: {
       $in: productIds,
     },
-  }).select("_id product");
+  });
 
   /*
    * Create lookup map
@@ -331,13 +331,15 @@ const getUserOrders = async ({ userId, page = 1, limit = 10, status }) => {
 
     orderObject.items = orderObject.items.map((item) => {
       const review = reviewMap.get(item.product.toString());
-
+      item.orderId = order._id;
       item.review = {
         canReview: order.orderStatus === ORDER_STATUS.DELIVERED && !review,
 
         hasReviewed: !!review,
 
         reviewId: review?._id || null,
+
+        review: review || null,
       };
 
       return item;

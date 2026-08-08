@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { getOrderById, cancelOrder } from "@/features/orders/services/orderService";
+import OrderReviewActions from "@/features/reviews/components/OrderReviewActions";
 
 import { toast } from "sonner";
 
@@ -38,31 +39,29 @@ export default function OrderDetailsPage({ params }) {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const [cancelError, setCancelError] = useState("");
+  let cancelled = false;
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadOrder = async () => {
+    try {
+      setIsLoading(true);
+      setError("");
 
-    const loadOrder = async () => {
-      try {
-        setIsLoading(true);
-        setError("");
+      const response = await getOrderById(orderId);
 
-        const response = await getOrderById(orderId);
+      if (cancelled) return;
 
-        if (cancelled) return;
+      setOrder(response);
+    } catch (error) {
+      if (cancelled) return;
 
-        setOrder(response);
-      } catch (error) {
-        if (cancelled) return;
-
-        setError(error.response?.data?.message || "Unable to load order.");
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+      setError(error.response?.data?.message || "Unable to load order.");
+    } finally {
+      if (!cancelled) {
+        setIsLoading(false);
       }
-    };
-
+    }
+  };
+  useEffect(() => {
     loadOrder();
 
     return () => {
@@ -125,7 +124,7 @@ export default function OrderDetailsPage({ params }) {
 
       <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
         <div className="space-y-5">
-          <OrderProducts items={order.items} />
+          <OrderProducts items={order.items} onReviewUpdated={loadOrder} />
 
           <DeliveryAddress address={order.shippingAddress} />
         </div>
@@ -395,7 +394,7 @@ function OrderTimeline({ order }) {
   );
 }
 
-function OrderProducts({ items }) {
+function OrderProducts({ items, onReviewUpdated }) {
   const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
 
   return (
@@ -429,6 +428,17 @@ function OrderProducts({ items }) {
               <p className="mt-2 text-xs text-[#6B7280]">
                 ₹{item.price.toLocaleString("en-IN")} × {item.quantity}
               </p>
+
+              {item.review && (
+                <div className="mt-4">
+                  <OrderReviewActions
+                    item={item}
+                    onReviewUpdated={() => {
+                      onReviewUpdated();
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="shrink-0">

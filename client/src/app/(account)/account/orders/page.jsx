@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Package, ShoppingBag } from "lucide-react";
 
 import { getMyOrders } from "@/features/orders/services/orderService";
-
 const STATUS_FILTERS = [
   {
     label: "All",
