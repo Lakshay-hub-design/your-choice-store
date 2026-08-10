@@ -13,11 +13,15 @@ import validate from "../middlewares/validate.js";
 
 import { placeOrderSchema, cancelOrderSchema } from "../validators/order.validator.js";
 
+import { verifyPayment } from "../controllers/order.controller.js";
+
 const router = Router();
 
 router.use(authenticate);
 
 router.post("/", validate(placeOrderSchema), placeOrder);
+
+router.post("/payments/verify", authenticate, verifyPayment);
 
 router.get("/:orderId", getOrderById);
 

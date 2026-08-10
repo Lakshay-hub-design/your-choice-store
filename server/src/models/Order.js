@@ -224,11 +224,35 @@ const orderSchema = new mongoose.Schema(
       providerOrderId: {
         type: String,
         default: "",
+        index: true,
       },
 
       paymentId: {
         type: String,
         default: "",
+        index: true,
+      },
+
+      signature: {
+        type: String,
+        default: "",
+      },
+
+      failureReason: {
+        type: String,
+        default: "",
+        trim: true,
+        maxlength: 500,
+      },
+
+      paidAt: {
+        type: Date,
+        default: null,
+      },
+
+      expiresAt: {
+        type: Date,
+        default: null,
       },
     },
 

@@ -10,6 +10,12 @@ import ApiError from "../utils/ApiError.js";
 
 import cartPricingService from "./cartPricing.service.js";
 
+import { createRazorpayOrder, getRazorpayPayment } from "./payment.service.js";
+
+import { verifyRazorpaySignature } from "../utils/razorpay.js";
+
+import { sendSellerNewOrderEmail } from "../features/notifications/services/sellerNotification.service.js";
+
 /**
  * Generate a unique, customer-friendly order number.
  *
@@ -22,6 +28,375 @@ const generateOrderNumber = () => {
   const random = Math.floor(1000 + Math.random() * 9000);
 
   return `YC-${timestamp}-${random}`;
+};
+
+const releaseOnlineOrderReservation = async (orderId) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    const order = await Order.findOne({
+      _id: orderId,
+      paymentMethod: "ONLINE",
+      paymentStatus: "PENDING",
+    }).session(session);
+
+    if (!order) {
+      throw new ApiError(404, "Pending online order not found.");
+    }
+
+    /*
+     * Release reserved inventory.
+     */
+    for (const item of order.items) {
+      const result = await Product.updateOne(
+        {
+          _id: item.product,
+          reservedStock: {
+            $gte: item.quantity,
+          },
+        },
+        {
+          $inc: {
+            stock: item.quantity,
+            reservedStock: -item.quantity,
+          },
+        },
+        {
+          session,
+        }
+      );
+
+      if (result.modifiedCount !== 1) {
+        throw new ApiError(409, "Unable to release reserved product stock.");
+      }
+    }
+
+    /*
+     * Mark payment/order as failed/cancelled.
+     */
+    order.paymentStatus = "FAILED";
+
+    order.payment.failureReason = "Payment initialization failed.";
+
+    order.orderStatus = ORDER_STATUS.CANCELLED;
+
+    order.cancelledAt = new Date();
+
+    order.statusHistory.push({
+      status: ORDER_STATUS.CANCELLED,
+      timestamp: new Date(),
+    });
+
+    await order.save({ session });
+
+    await session.commitTransaction();
+
+    return order;
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+};
+
+const verifyOnlinePayment = async ({
+  userId,
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+}) => {
+  /*
+   * ==========================================
+   * 1. Validate payment response
+   * ==========================================
+   */
+
+  if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    throw new ApiError(400, "Payment verification details are required.");
+  }
+
+  /*
+   * ==========================================
+   * 2. Find OUR order
+   * ==========================================
+   *
+   * We use the Razorpay order ID that
+   * OUR backend stored.
+   */
+
+  const order = await Order.findOne({
+    user: userId,
+
+    paymentMethod: "ONLINE",
+
+    "payment.provider": "RAZORPAY",
+
+    "payment.providerOrderId": razorpayOrderId,
+  });
+
+  if (!order) {
+    throw new ApiError(404, "Payment order not found.");
+  }
+
+  /*
+   * ==========================================
+   * 3. Idempotency
+   * ==========================================
+   *
+   * If webhook/callback already completed
+   * this payment, don't process it again.
+   */
+
+  if (order.paymentStatus === "PAID") {
+    return {
+      success: true,
+      alreadyPaid: true,
+      order,
+    };
+  }
+
+  /*
+   * ==========================================
+   * 4. Don't pay cancelled orders
+   * ==========================================
+   */
+
+  if (order.orderStatus === ORDER_STATUS.CANCELLED) {
+    throw new ApiError(400, "This order is no longer payable.");
+  }
+
+  /*
+   * ==========================================
+   * 5. Verify Razorpay signature
+   * ==========================================
+   *
+   * IMPORTANT:
+   *
+   * We use the providerOrderId stored
+   * in our database.
+   *
+   * We do NOT blindly trust the order ID
+   * returned by the browser.
+   */
+
+  const signatureValid = verifyRazorpaySignature({
+    orderId: order.payment.providerOrderId,
+
+    paymentId: razorpayPaymentId,
+
+    signature: razorpaySignature,
+  });
+
+  if (!signatureValid) {
+    /*
+     * A bad signature is potentially
+     * tampered/fraudulent data.
+     *
+     * Do NOT fulfil the order.
+     */
+    throw new ApiError(400, "Payment signature verification failed.");
+  }
+
+  /*
+   * ==========================================
+   * 6. Fetch payment directly from Razorpay
+   * ==========================================
+   */
+
+  const razorpayPayment = await getRazorpayPayment(razorpayPaymentId);
+
+  /*
+   * ==========================================
+   * 7. Verify payment belongs to our
+   *    Razorpay order
+   * ==========================================
+   */
+
+  if (razorpayPayment.order_id !== order.payment.providerOrderId) {
+    throw new ApiError(400, "Payment does not belong to this order.");
+  }
+
+  /*
+   * ==========================================
+   * 8. Verify currency
+   * ==========================================
+   */
+
+  if (razorpayPayment.currency !== "INR") {
+    throw new ApiError(400, "Invalid payment currency.");
+  }
+
+  /*
+   * ==========================================
+   * 9. Verify exact amount
+   * ==========================================
+   *
+   * Our database:
+   * ₹999
+   *
+   * Razorpay:
+   * 99900 paise
+   */
+
+  const expectedAmount = Math.round(order.pricing.grandTotal * 100);
+
+  if (Number(razorpayPayment.amount) !== expectedAmount) {
+    throw new ApiError(400, "Payment amount does not match the order.");
+  }
+
+  /*
+   * ==========================================
+   * 10. Payment must be captured
+   * ==========================================
+   */
+
+  if (razorpayPayment.status !== "captured") {
+    throw new ApiError(400, "Payment has not been captured yet.");
+  }
+
+  /*
+   * ==========================================
+   * 11. Atomic finalization
+   * ==========================================
+   */
+
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    /*
+     * Re-fetch order inside transaction.
+     */
+    const currentOrder = await Order.findOne({
+      _id: order._id,
+
+      user: userId,
+
+      paymentMethod: "ONLINE",
+    }).session(session);
+
+    if (!currentOrder) {
+      throw new ApiError(404, "Order not found.");
+    }
+
+    /*
+     * Another request may have already
+     * completed the payment.
+     */
+
+    if (currentOrder.paymentStatus === "PAID") {
+      await session.commitTransaction();
+
+      return {
+        success: true,
+        alreadyPaid: true,
+        order: currentOrder,
+      };
+    }
+
+    /*
+     * Don't process a non-pending payment.
+     */
+
+    if (currentOrder.paymentStatus !== "PENDING") {
+      throw new ApiError(409, "This payment can no longer be processed.");
+    }
+
+    /*
+     * ======================================
+     * 12. Convert reservation → sold
+     * ======================================
+     */
+
+    for (const item of currentOrder.items) {
+      const result = await Product.updateOne(
+        {
+          _id: item.product,
+
+          reservedStock: {
+            $gte: item.quantity,
+          },
+        },
+        {
+          $inc: {
+            reservedStock: -item.quantity,
+
+            sold: item.quantity,
+          },
+        },
+        {
+          session,
+        }
+      );
+
+      if (result.modifiedCount !== 1) {
+        throw new ApiError(409, "Unable to finalize product inventory.");
+      }
+    }
+
+    /*
+     * ======================================
+     * 13. Mark payment as PAID
+     * ======================================
+     */
+
+    currentOrder.paymentStatus = "PAID";
+
+    currentOrder.payment.paymentId = razorpayPaymentId;
+
+    currentOrder.payment.signature = razorpaySignature;
+
+    currentOrder.payment.paidAt = new Date();
+
+    currentOrder.payment.failureReason = "";
+
+    /*
+     * ======================================
+     * 14. Confirm order
+     * ======================================
+     */
+
+    currentOrder.orderStatus = ORDER_STATUS.CONFIRMED;
+
+    currentOrder.statusHistory.push({
+      status: ORDER_STATUS.CONFIRMED,
+
+      timestamp: new Date(),
+    });
+
+    await currentOrder.save({
+      session,
+    });
+
+    /*
+     * ======================================
+     * 15. Commit
+     * ======================================
+     */
+
+    await session.commitTransaction();
+
+    return {
+      success: true,
+      alreadyPaid: false,
+      order: currentOrder,
+    };
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 };
 
 /**
@@ -221,6 +596,10 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
      */
     await session.commitTransaction();
 
+    sendSellerNewOrderEmail(order).catch((error) => {
+      console.error("Seller order email failed:", error);
+    });
+
     return order;
   } catch (error) {
     /*
@@ -256,6 +635,467 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
   }
 };
 
+const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
+  /*
+   * ============================================
+   * 1. Validate request
+   * ============================================
+   */
+
+  if (!mongoose.Types.ObjectId.isValid(addressId)) {
+    throw new ApiError(400, "Invalid address ID");
+  }
+
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    throw new ApiError(400, "Idempotency key is required");
+  }
+
+  const normalizedIdempotencyKey = idempotencyKey.trim();
+
+  if (!normalizedIdempotencyKey || normalizedIdempotencyKey.length > 100) {
+    throw new ApiError(400, "Invalid idempotency key");
+  }
+
+  /*
+   * ============================================
+   * 2. Fast idempotency check
+   * ============================================
+   */
+
+  const existingOrder = await Order.findOne({
+    user: userId,
+    idempotencyKey: normalizedIdempotencyKey,
+  });
+
+  if (existingOrder) {
+    /*
+     * If payment order has already
+     * been initialized, return it.
+     */
+
+    if (existingOrder.payment?.providerOrderId) {
+      return {
+        order: existingOrder,
+
+        payment: {
+          provider: "RAZORPAY",
+
+          keyId: process.env.RAZORPAY_KEY_ID,
+
+          orderId: existingOrder.payment.providerOrderId,
+
+          amount: Math.round(existingOrder.pricing.grandTotal * 100),
+
+          currency: "INR",
+        },
+      };
+    }
+
+    /*
+     * An order exists but Razorpay
+     * initialization hasn't completed.
+     *
+     * Don't create another order.
+     */
+    throw new ApiError(409, "Your payment is already being initialized. Please try again.");
+  }
+
+  /*
+   * ============================================
+   * 3. Load address and cart
+   * ============================================
+   *
+   * We do this before creating the
+   * Razorpay order so the amount is
+   * calculated entirely by our backend.
+   */
+
+  const address = await Address.findOne({
+    _id: addressId,
+    user: userId,
+  });
+
+  if (!address) {
+    throw new ApiError(404, "Address not found");
+  }
+
+  const cart = await Cart.findOne({
+    user: userId,
+  });
+
+  if (!cart || cart.items.length === 0) {
+    throw new ApiError(400, "Your cart is empty");
+  }
+
+  /*
+   * ============================================
+   * 4. Load latest product information
+   * ============================================
+   */
+
+  const productIds = cart.items.map((item) => item.product);
+
+  const products = await Product.find({
+    _id: {
+      $in: productIds,
+    },
+
+    isActive: true,
+
+    isArchived: false,
+  });
+
+  /*
+   * ============================================
+   * 5. Server-authoritative pricing
+   * ============================================
+   */
+
+  const { items: orderItems, pricing } = cartPricingService.buildCartSummary({
+    cart,
+    products,
+  });
+
+  if (!pricing || !Number.isFinite(pricing.grandTotal) || pricing.grandTotal <= 0) {
+    throw new ApiError(400, "Invalid order amount.");
+  }
+
+  /*
+   * ============================================
+   * 6. Generate our order number
+   * ============================================
+   */
+
+  const orderNumber = generateOrderNumber();
+
+  /*
+   * ============================================
+   * 7. Create Razorpay Order
+   * ============================================
+   *
+   * IMPORTANT:
+   *
+   * The amount comes from our backend,
+   * never from the frontend.
+   */
+
+  const razorpayOrder = await createRazorpayOrder({
+    orderId: orderNumber,
+
+    amount: pricing.grandTotal,
+  });
+
+  /*
+   * ============================================
+   * 8. Create DB order + reserve stock
+   * ============================================
+   */
+
+  const session = await mongoose.startSession();
+
+  let order;
+
+  try {
+    session.startTransaction();
+
+    /*
+     * Re-check idempotency inside
+     * transaction.
+     *
+     * This protects against two
+     * concurrent checkout requests.
+     */
+    const concurrentOrder = await Order.findOne({
+      user: userId,
+
+      idempotencyKey: normalizedIdempotencyKey,
+    }).session(session);
+
+    if (concurrentOrder) {
+      await session.abortTransaction();
+
+      /*
+       * The Razorpay order we created
+       * for this losing request is now
+       * unused.
+       *
+       * We simply don't attach it to
+       * the existing order.
+       */
+      if (concurrentOrder.payment?.providerOrderId) {
+        return {
+          order: concurrentOrder,
+
+          payment: {
+            provider: "RAZORPAY",
+
+            keyId: process.env.RAZORPAY_KEY_ID,
+
+            orderId: concurrentOrder.payment.providerOrderId,
+
+            amount: Math.round(concurrentOrder.pricing.grandTotal * 100),
+
+            currency: "INR",
+          },
+        };
+      }
+
+      throw new ApiError(409, "Order is already being processed.");
+    }
+
+    /*
+     * ========================================
+     * 9. Re-load cart inside transaction
+     * ========================================
+     *
+     * The cart may have changed while
+     * Razorpay order was being created.
+     */
+
+    const currentCart = await Cart.findOne({
+      user: userId,
+    }).session(session);
+
+    if (!currentCart || currentCart.items.length === 0) {
+      throw new ApiError(400, "Your cart is empty.");
+    }
+
+    /*
+     * Make sure the cart used for the
+     * Razorpay amount is still the same.
+     */
+    const currentProductIds = currentCart.items.map((item) => item.product);
+
+    const currentProducts = await Product.find({
+      _id: {
+        $in: currentProductIds,
+      },
+
+      isActive: true,
+
+      isArchived: false,
+    }).session(session);
+
+    const { items: currentOrderItems, pricing: currentPricing } =
+      cartPricingService.buildCartSummary({
+        cart: currentCart,
+        products: currentProducts,
+      });
+
+    /*
+     * Prevent paying an amount calculated
+     * from a cart that changed while the
+     * Razorpay order was being created.
+     */
+    if (currentPricing.grandTotal !== pricing.grandTotal) {
+      throw new ApiError(409, "Your cart changed. Please refresh checkout and try again.");
+    }
+
+    /*
+     * ========================================
+     * 10. Snapshot shipping address
+     * ========================================
+     */
+
+    const shippingAddress = {
+      fullName: address.fullName,
+
+      phone: address.phone,
+
+      houseNumber: address.houseNumber,
+
+      landmark: address.landmark || "",
+
+      formattedAddress: address.formattedAddress,
+
+      city: address.city,
+
+      state: address.state,
+
+      postalCode: address.postalCode,
+
+      country: address.country || "India",
+    };
+
+    /*
+     * ========================================
+     * 11. Reserve inventory
+     * ========================================
+     */
+
+    for (const cartItem of currentCart.items) {
+      const result = await Product.updateOne(
+        {
+          _id: cartItem.product,
+
+          isActive: true,
+
+          isArchived: false,
+
+          stock: {
+            $gte: cartItem.quantity,
+          },
+        },
+        {
+          $inc: {
+            stock: -cartItem.quantity,
+
+            reservedStock: cartItem.quantity,
+          },
+        },
+        {
+          session,
+        }
+      );
+
+      if (result.modifiedCount !== 1) {
+        throw new ApiError(
+          409,
+          "Product stock changed while placing your order. Please try again."
+        );
+      }
+    }
+
+    /*
+     * ========================================
+     * 12. Create our DB order
+     * ========================================
+     */
+
+    const placedAt = new Date();
+
+    const [createdOrder] = await Order.create(
+      [
+        {
+          orderNumber,
+
+          user: userId,
+
+          idempotencyKey: normalizedIdempotencyKey,
+
+          items: currentOrderItems,
+
+          shippingAddress,
+
+          pricing: currentPricing,
+
+          paymentMethod: "ONLINE",
+
+          paymentStatus: "PENDING",
+
+          orderStatus: ORDER_STATUS.PLACED,
+
+          statusHistory: [
+            {
+              status: ORDER_STATUS.PLACED,
+
+              timestamp: placedAt,
+            },
+          ],
+
+          payment: {
+            provider: "RAZORPAY",
+
+            providerOrderId: razorpayOrder.id,
+
+            paymentId: "",
+
+            signature: "",
+
+            failureReason: "",
+
+            paidAt: null,
+
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          },
+
+          placedAt,
+        },
+      ],
+      {
+        session,
+      }
+    );
+
+    order = createdOrder;
+
+    /*
+     * ========================================
+     * 13. Commit transaction
+     * ========================================
+     */
+
+    await session.commitTransaction();
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    /*
+     * The Razorpay order exists,
+     * but our DB transaction failed.
+     *
+     * It will remain unused and no
+     * customer-facing order will be
+     * created.
+     */
+
+    if (error?.code === 11000) {
+      const existingOrder = await Order.findOne({
+        user: userId,
+
+        idempotencyKey: normalizedIdempotencyKey,
+      });
+
+      if (existingOrder) {
+        if (existingOrder.payment?.providerOrderId) {
+          return {
+            order: existingOrder,
+
+            payment: {
+              provider: "RAZORPAY",
+
+              keyId: process.env.RAZORPAY_KEY_ID,
+
+              orderId: existingOrder.payment.providerOrderId,
+
+              amount: Math.round(existingOrder.pricing.grandTotal * 100),
+
+              currency: "INR",
+            },
+          };
+        }
+      }
+    }
+
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+
+  /*
+   * ============================================
+   * 14. Return checkout information
+   * ============================================
+   */
+
+  return {
+    order,
+
+    payment: {
+      provider: "RAZORPAY",
+
+      keyId: process.env.RAZORPAY_KEY_ID,
+
+      orderId: razorpayOrder.id,
+
+      amount: razorpayOrder.amount,
+
+      currency: razorpayOrder.currency,
+    },
+  };
+};
+
 const getOrderById = async ({ userId, orderId }) => {
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
     throw new ApiError(400, "Invalid order ID");
@@ -270,7 +1110,65 @@ const getOrderById = async ({ userId, orderId }) => {
     throw new ApiError(404, "Order not found");
   }
 
-  return order;
+  /*
+   * Get product IDs from the order
+   */
+  const productIds = order.items.map((item) => item.product.toString());
+
+  /*
+   * Get reviews written by this user
+   * for products in this order.
+   */
+  let reviews = [];
+
+  if (productIds.length > 0) {
+    reviews = await Review.find({
+      user: userId,
+      product: {
+        $in: productIds,
+      },
+    }).select("_id product rating title comment images");
+  }
+
+  /*
+   * Create product -> review lookup
+   */
+  const reviewMap = new Map();
+
+  reviews.forEach((review) => {
+    reviewMap.set(review.product.toString(), review);
+  });
+
+  /*
+   * Convert mongoose document
+   * into plain object.
+   */
+  const orderObject = order.toObject();
+
+  /*
+   * Add review information to
+   * every order item.
+   */
+  orderObject.items = orderObject.items.map((item) => {
+    const review = reviewMap.get(item.product.toString());
+
+    return {
+      ...item,
+
+      orderId: orderObject._id,
+
+      review: {
+        canReview: orderObject.orderStatus === ORDER_STATUS.DELIVERED && !review,
+
+        hasReviewed: Boolean(review),
+
+        reviewId: review?._id || null,
+
+        review: review || null,
+      },
+    };
+  });
+  return orderObject;
 };
 
 const getUserOrders = async ({ userId, page = 1, limit = 10, status }) => {
@@ -794,6 +1692,8 @@ const cancelAdminOrder = async ({ orderId, reason = "" }) => {
 
 const orderService = {
   placeCODOrder,
+  placeOnlineOrder,
+  verifyOnlinePayment,
   getOrderById,
   getUserOrders,
   cancelOrder,

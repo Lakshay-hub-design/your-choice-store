@@ -14,23 +14,63 @@ const placeOrder = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Idempotency key is required");
   }
 
-  let order;
+  let result;
 
   switch (paymentMethod) {
     case "COD":
-      order = await orderService.placeCODOrder({
+      result = await orderService.placeCODOrder({
         userId: req.user._id,
+
         addressId,
+
         idempotencyKey,
       });
 
-      break;
+      return res.status(201).json(
+        new ApiResponse(201, "Order placed successfully", {
+          order: result,
+          payment: null,
+        })
+      );
+
+    case "ONLINE":
+      result = await orderService.placeOnlineOrder({
+        userId: req.user._id,
+
+        addressId,
+
+        idempotencyKey,
+      });
+
+      return res.status(201).json(new ApiResponse(201, "Payment initialized successfully", result));
 
     default:
-      throw new Error("Unsupported payment method");
+      throw new ApiError(400, "Unsupported payment method");
   }
+});
 
-  return res.status(201).json(new ApiResponse(201, "Order placed successfully", order));
+const verifyPayment = asyncHandler(async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+  const result = await orderService.verifyOnlinePayment({
+    userId: req.user._id,
+
+    razorpayOrderId: razorpay_order_id,
+
+    razorpayPaymentId: razorpay_payment_id,
+
+    razorpaySignature: razorpay_signature,
+  });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        result.alreadyPaid ? "Payment already verified." : "Payment verified successfully.",
+        result
+      )
+    );
 });
 
 const getOrderById = asyncHandler(async (req, res) => {
@@ -98,6 +138,7 @@ const cancelAdminOrder = asyncHandler(async (req, res) => {
 
 export {
   placeOrder,
+  verifyPayment,
   getOrderById,
   getUserOrders,
   cancelOrder,

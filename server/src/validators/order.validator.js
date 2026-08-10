@@ -4,7 +4,9 @@ export const placeOrderSchema = z.object({
   body: z.object({
     addressId: z.string().trim().min(1, "Address is required"),
 
-    paymentMethod: z.enum(["COD"]),
+    paymentMethod: z.enum(["COD", "ONLINE"], {
+      message: "Invalid payment method.",
+    }),
   }),
 });
 
