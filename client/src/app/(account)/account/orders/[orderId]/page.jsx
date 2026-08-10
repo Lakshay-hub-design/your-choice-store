@@ -63,10 +63,6 @@ export default function OrderDetailsPage({ params }) {
   };
   useEffect(() => {
     loadOrder();
-
-    return () => {
-      cancelled = true;
-    };
   }, [orderId]);
 
   if (isLoading) {
@@ -430,14 +426,12 @@ function OrderProducts({ items, onReviewUpdated }) {
               </p>
 
               {item.review && (
-                <div className="mt-4">
-                  <OrderReviewActions
-                    item={item}
-                    onReviewUpdated={() => {
-                      onReviewUpdated();
-                    }}
-                  />
-                </div>
+                <OrderReviewActions
+                  productId={item.product}
+                  orderId={item.orderId}
+                  review={item.review}
+                  onReviewUpdated={onReviewUpdated}
+                />
               )}
             </div>
 

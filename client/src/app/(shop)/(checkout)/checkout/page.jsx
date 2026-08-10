@@ -16,6 +16,7 @@ import CheckoutAddressSection from "@/features/checkout/components/CheckoutAddre
 import CheckoutItems from "@/features/checkout/components/CheckoutItems";
 import CheckoutPayment from "@/features/checkout/components/CheckoutPayment";
 import CheckoutSummary from "@/features/checkout/components/CheckoutSummary";
+import RazorpayCheckout from "@/features/checkout/components/RazorpayCheckout";
 
 import ProtectedRoute from "@/features/auth/ProtectedRoute";
 
@@ -35,6 +36,12 @@ function CheckoutContent() {
   const [selectedAddressId, setSelectedAddressId] = useState(null);
 
   const [paymentMethod, setPaymentMethod] = useState("COD");
+
+  const [paymentData, setPaymentData] = useState(null);
+
+  const [createdOrder, setCreatedOrder] = useState(null);
+
+  const [paymentFailed, setPaymentFailed] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -136,6 +143,7 @@ function CheckoutContent() {
     }
 
     setError("");
+    setPaymentFailed(false);
     setIsPlacingOrder(true);
 
     if (!idempotencyKeyRef.current) {
@@ -146,23 +154,82 @@ function CheckoutContent() {
       const response = await placeOrder(
         {
           addressId: selectedAddressId,
+
           paymentMethod,
+
           expectedTotal: checkout.pricing.grandTotal,
         },
+
         idempotencyKeyRef.current
       );
 
-      const order = response.data?.data;
+      const data = response.data?.data;
 
-      if (!order?._id) {
-        throw new Error("Order was placed but the order information is unavailable.");
+      if (!data) {
+        throw new Error("Order information is unavailable.");
       }
 
-      useCartStore.getState().resetCart();
+      /*
+       * ========================================
+       * COD
+       * ========================================
+       */
 
-      idempotencyKeyRef.current = null;
+      if (paymentMethod === "COD") {
+        const order = data.order || data;
 
-      router.replace(`/order-success?order=${order._id}`);
+        if (!order?._id) {
+          throw new Error("Order was placed but order information is unavailable.");
+        }
+
+        /*
+         * COD is already successfully placed.
+         */
+        useCartStore.getState().resetCart();
+
+        idempotencyKeyRef.current = null;
+
+        router.replace(`/order-success?order=${order._id}`);
+
+        return;
+      }
+
+      /*
+       * ========================================
+       * ONLINE PAYMENT
+       * ========================================
+       */
+
+      const order = data.order;
+
+      const payment = data.payment;
+
+      if (!order?._id) {
+        throw new Error("Order was created but order information is unavailable.");
+      }
+
+      if (!payment?.keyId || !payment?.orderId) {
+        throw new Error("Payment could not be initialized.");
+      }
+
+      /*
+       * IMPORTANT:
+       *
+       * Don't clear cart.
+       * Don't navigate to success.
+       *
+       * Payment is still pending.
+       */
+
+      setCreatedOrder(order);
+
+      setPaymentData(payment);
+
+      /*
+       * Keep the same idempotency key while
+       * this payment is being completed.
+       */
+      setPaymentFailed(false);
     } catch (error) {
       const status = error.response?.status;
 
@@ -289,13 +356,89 @@ function CheckoutContent() {
           {/* RIGHT */}
 
           <div className="lg:sticky lg:top-6">
-            <CheckoutSummary
-              pricing={checkout.pricing}
-              itemCount={checkout.items?.length || 0}
-              disabled={!selectedAddressId || isPlacingOrder}
-              isPlacingOrder={isPlacingOrder}
-              onPlaceOrder={handlePlaceOrder}
-            />
+            {!paymentData ? (
+              <CheckoutSummary
+                pricing={checkout.pricing}
+                itemCount={checkout.items?.length || 0}
+                disabled={!selectedAddressId || isPlacingOrder}
+                isPlacingOrder={isPlacingOrder}
+                onPlaceOrder={handlePlaceOrder}
+              />
+            ) : (
+              <div className="rounded-2xl border border-[#EDE9E6] bg-white p-5 shadow-sm">
+                <div>
+                  <p className="text-xs font-medium text-[#6B7280]">Order Total</p>
+
+                  <p className="mt-1 text-2xl font-bold text-[#242424]">
+                    ₹{Number(createdOrder?.pricing?.grandTotal || 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+
+                {paymentFailed && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm font-semibold text-red-600">Payment failed</p>
+
+                    <p className="mt-1 text-xs leading-5 text-red-500">
+                      Your order is still available. You can try the payment again.
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-5">
+                  <RazorpayCheckout
+                    payment={paymentData}
+                    order={createdOrder}
+                    onSuccess={(result) => {
+                      /*
+                       * Payment has now been verified
+                       * by our backend.
+                       */
+
+                      const paidOrder = result.data?.order;
+
+                      if (!paidOrder?._id) {
+                        toast.error("Payment succeeded, but order information is unavailable.");
+
+                        return;
+                      }
+
+                      /*
+                       * NOW clear the cart.
+                       */
+                      useCartStore.getState().resetCart();
+
+                      idempotencyKeyRef.current = null;
+
+                      router.replace(`/order-success?order=${paidOrder._id}`);
+                    }}
+                    onFailure={(failure) => {
+                      if (failure?.type === "PAYMENT_FAILED") {
+                        setPaymentFailed(true);
+                      }
+
+                      /*
+                       * Closing Razorpay doesn't mean
+                       * the order is cancelled.
+                       */
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isPlacingOrder}
+                  onClick={() => {
+                    setPaymentData(null);
+                    setCreatedOrder(null);
+                    setPaymentFailed(false);
+                    idempotencyKeyRef.current = null;
+                  }}
+                  className="mt-3 w-full rounded-xl border border-[#EDE9E6] px-5 py-3 text-sm font-medium text-[#6B7280] transition hover:bg-[#FFF9F5]"
+                >
+                  Back to Checkout
+                </button>
+              </div>
+            )}
 
             <div className="mt-3 flex items-center justify-center gap-2 text-xs text-[#9CA3AF]">
               <LockKeyhole size={13} />

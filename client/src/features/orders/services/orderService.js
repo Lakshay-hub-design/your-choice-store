@@ -2,7 +2,7 @@ import api from "@/lib/axios";
 
 export const getOrderById = async (orderId) => {
   const response = await api.get(`/orders/${orderId}`);
-
+  console.log("getOrderById response:", response.data);
   return response.data.data;
 };
 

@@ -108,7 +108,7 @@ const useCartStore = create((set, get) => ({
     try {
       const response = await removeCartItem(productId);
 
-      const cart = response.data?.cart;
+      const cart = response.data?.cart ?? response.data;
 
       set({
         cart,
@@ -122,7 +122,6 @@ const useCartStore = create((set, get) => ({
     } catch (error) {
       return {
         success: false,
-
         message: error.response?.data?.message || "Unable to remove product.",
       };
     }
