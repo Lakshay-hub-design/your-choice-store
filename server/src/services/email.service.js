@@ -1,6 +1,6 @@
 import resend from "../config/resend.js";
 
-const sendEmail = async ({ to, subject, html }) => {
+export const sendEmail = async ({ to, subject, html }) => {
   const res = await resend.emails.send({
     from: process.env.MAIL_FROM,
     to,
