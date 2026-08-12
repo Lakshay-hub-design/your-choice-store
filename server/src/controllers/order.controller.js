@@ -4,6 +4,10 @@ import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
+import verifyWebhookSignature from "../utils/verifyWebhookSignature.js";
+import processRazorpayWebhook from "../services/razorpayWebhook.service.js";
+
+import { sendSellerPaidOrderEmail } from "../features/notifications/services/sellerNotification.service.js";
 
 const placeOrder = asyncHandler(async (req, res) => {
   const { addressId, paymentMethod } = req.body;
@@ -136,6 +140,63 @@ const cancelAdminOrder = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, "Order cancelled successfully", order));
 });
 
+const razorpayWebhook = asyncHandler(async (req, res) => {
+  /*
+   * req.body must be a Buffer.
+   */
+  const rawBody = req.body;
+
+  const signature = req.headers["x-razorpay-signature"];
+
+  console.log("Webhook body is Buffer:", Buffer.isBuffer(req.body));
+
+  console.log("Webhook signature:", req.headers["x-razorpay-signature"]);
+
+  /*
+   * Verify Razorpay signature.
+   */
+  const signatureValid = verifyWebhookSignature({
+    rawBody,
+    signature,
+  });
+
+  if (!signatureValid) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid webhook signature.",
+    });
+  }
+
+  /*
+   * Parse only AFTER signature
+   * verification.
+   */
+  const event = JSON.parse(rawBody.toString("utf8"));
+
+  const result = await processRazorpayWebhook({
+    event,
+  });
+
+  /*
+   * Send seller email only when
+   * this webhook actually finalized
+   * the payment.
+   */
+  if (result.finalized && result.order) {
+    sendSellerPaidOrderEmail(result.order).catch((error) => {
+      console.error("Seller webhook payment email failed:", error);
+    });
+  }
+
+  /*
+   * Razorpay needs a 2xx response.
+   */
+  return res.status(200).json({
+    success: true,
+    received: true,
+  });
+});
+
 export {
   placeOrder,
   verifyPayment,
@@ -146,4 +207,5 @@ export {
   getAdminOrderById,
   updateAdminOrderStatus,
   cancelAdminOrder,
+  razorpayWebhook,
 };

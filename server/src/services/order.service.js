@@ -14,7 +14,10 @@ import { createRazorpayOrder, getRazorpayPayment } from "./payment.service.js";
 
 import { verifyRazorpaySignature } from "../utils/razorpay.js";
 
-import { sendSellerNewOrderEmail } from "../features/notifications/services/sellerNotification.service.js";
+import {
+  sendSellerNewOrderEmail,
+  sendSellerPaidOrderEmail,
+} from "../features/notifications/services/sellerNotification.service.js";
 
 /**
  * Generate a unique, customer-friendly order number.
@@ -125,9 +128,6 @@ const verifyOnlinePayment = async ({
    * ==========================================
    * 2. Find OUR order
    * ==========================================
-   *
-   * We use the Razorpay order ID that
-   * OUR backend stored.
    */
 
   const order = await Order.findOne({
@@ -146,17 +146,16 @@ const verifyOnlinePayment = async ({
 
   /*
    * ==========================================
-   * 3. Idempotency
+   * 3. Already paid?
    * ==========================================
-   *
-   * If webhook/callback already completed
-   * this payment, don't process it again.
    */
 
   if (order.paymentStatus === "PAID") {
     return {
       success: true,
+
       alreadyPaid: true,
+
       order,
     };
   }
@@ -175,14 +174,6 @@ const verifyOnlinePayment = async ({
    * ==========================================
    * 5. Verify Razorpay signature
    * ==========================================
-   *
-   * IMPORTANT:
-   *
-   * We use the providerOrderId stored
-   * in our database.
-   *
-   * We do NOT blindly trust the order ID
-   * returned by the browser.
    */
 
   const signatureValid = verifyRazorpaySignature({
@@ -194,12 +185,6 @@ const verifyOnlinePayment = async ({
   });
 
   if (!signatureValid) {
-    /*
-     * A bad signature is potentially
-     * tampered/fraudulent data.
-     *
-     * Do NOT fulfil the order.
-     */
     throw new ApiError(400, "Payment signature verification failed.");
   }
 
@@ -213,58 +198,51 @@ const verifyOnlinePayment = async ({
 
   /*
    * ==========================================
-   * 7. Verify payment belongs to our
-   *    Razorpay order
+   * 7. Finalize payment
    * ==========================================
    */
 
-  if (razorpayPayment.order_id !== order.payment.providerOrderId) {
-    throw new ApiError(400, "Payment does not belong to this order.");
-  }
+  const result = await finalizeOnlinePayment({
+    orderId: order._id,
+
+    userId,
+
+    razorpayPayment,
+
+    razorpaySignature,
+  });
 
   /*
    * ==========================================
-   * 8. Verify currency
-   * ==========================================
-   */
-
-  if (razorpayPayment.currency !== "INR") {
-    throw new ApiError(400, "Invalid payment currency.");
-  }
-
-  /*
-   * ==========================================
-   * 9. Verify exact amount
+   * 8. Seller notification
    * ==========================================
    *
-   * Our database:
-   * ₹999
-   *
-   * Razorpay:
-   * 99900 paise
+   * Only send when THIS request actually
+   * changed the order from PENDING → PAID.
    */
 
-  const expectedAmount = Math.round(order.pricing.grandTotal * 100);
-
-  if (Number(razorpayPayment.amount) !== expectedAmount) {
-    throw new ApiError(400, "Payment amount does not match the order.");
+  if (result.finalized && result.order) {
+    sendSellerPaidOrderEmail(result.order).catch((error) => {
+      console.error("Seller paid-order email failed:", error);
+    });
   }
 
-  /*
-   * ==========================================
-   * 10. Payment must be captured
-   * ==========================================
-   */
+  return result;
+};
 
-  if (razorpayPayment.status !== "captured") {
-    throw new ApiError(400, "Payment has not been captured yet.");
+const finalizeOnlinePayment = async ({
+  orderId,
+  userId = null,
+  razorpayPayment,
+  razorpaySignature = "",
+}) => {
+  if (!orderId) {
+    throw new ApiError(400, "Order ID is required.");
   }
 
-  /*
-   * ==========================================
-   * 11. Atomic finalization
-   * ==========================================
-   */
+  if (!razorpayPayment) {
+    throw new ApiError(400, "Payment details are required.");
+  }
 
   const session = await mongoose.startSession();
 
@@ -272,50 +250,120 @@ const verifyOnlinePayment = async ({
     session.startTransaction();
 
     /*
-     * Re-fetch order inside transaction.
+     * Find our order.
+     *
+     * userId is supplied when this function
+     * is called from the normal frontend
+     * verification flow.
+     *
+     * Webhooks don't have our user's JWT,
+     * so userId can be null.
      */
-    const currentOrder = await Order.findOne({
-      _id: order._id,
-
-      user: userId,
-
+    const orderFilter = {
+      _id: orderId,
       paymentMethod: "ONLINE",
-    }).session(session);
+    };
 
-    if (!currentOrder) {
-      throw new ApiError(404, "Order not found.");
+    if (userId) {
+      orderFilter.user = userId;
+    }
+
+    const order = await Order.findOne(orderFilter).session(session);
+
+    if (!order) {
+      throw new ApiError(404, "Payment order not found.");
     }
 
     /*
-     * Another request may have already
-     * completed the payment.
+     * Already paid.
+     *
+     * This is extremely important because:
+     *
+     * frontend verification
+     * and
+     * webhook
+     *
+     * can both reach the server.
      */
-
-    if (currentOrder.paymentStatus === "PAID") {
+    if (order.paymentStatus === "PAID") {
       await session.commitTransaction();
 
       return {
         success: true,
+        finalized: true,
         alreadyPaid: true,
-        order: currentOrder,
+        order,
       };
     }
 
     /*
-     * Don't process a non-pending payment.
+     * Cancelled orders cannot be finalized.
      */
+    if (order.orderStatus === ORDER_STATUS.CANCELLED) {
+      throw new ApiError(400, "This order is no longer payable.");
+    }
 
-    if (currentOrder.paymentStatus !== "PENDING") {
+    /*
+     * Only PENDING payments can be finalized.
+     */
+    if (order.paymentStatus !== "PENDING") {
       throw new ApiError(409, "This payment can no longer be processed.");
     }
 
     /*
-     * ======================================
-     * 12. Convert reservation → sold
-     * ======================================
+     * Verify Razorpay order ID.
+     *
+     * This ensures that the payment belongs
+     * to THIS order.
      */
+    if (razorpayPayment.order_id !== order.payment.providerOrderId) {
+      throw new ApiError(400, "Payment does not belong to this order.");
+    }
 
-    for (const item of currentOrder.items) {
+    /*
+     * Currency verification.
+     */
+    if (razorpayPayment.currency !== "INR") {
+      throw new ApiError(400, "Invalid payment currency.");
+    }
+
+    /*
+     * Amount verification.
+     *
+     * Our database stores rupees.
+     * Razorpay stores paise.
+     */
+    const expectedAmount = Math.round(order.pricing.grandTotal * 100);
+
+    if (Number(razorpayPayment.amount) !== expectedAmount) {
+      throw new ApiError(400, "Payment amount does not match the order.");
+    }
+
+    /*
+     * Payment must actually be captured.
+     */
+    if (razorpayPayment.status !== "captured") {
+      throw new ApiError(400, "Payment has not been captured yet.");
+    }
+
+    /*
+     * ========================================
+     * INVENTORY
+     * ========================================
+     *
+     * Before payment:
+     *
+     * stock = available stock
+     * reservedStock = temporarily reserved
+     *
+     * After successful payment:
+     *
+     * reservedStock decreases
+     * sold increases
+     *
+     * We DO NOT increase stock here.
+     */
+    for (const item of order.items) {
       const result = await Product.updateOne(
         {
           _id: item.product,
@@ -327,7 +375,6 @@ const verifyOnlinePayment = async ({
         {
           $inc: {
             reservedStock: -item.quantity,
-
             sold: item.quantity,
           },
         },
@@ -342,51 +389,65 @@ const verifyOnlinePayment = async ({
     }
 
     /*
-     * ======================================
-     * 13. Mark payment as PAID
-     * ======================================
+     * ========================================
+     * PAYMENT
+     * ========================================
      */
 
-    currentOrder.paymentStatus = "PAID";
+    order.paymentStatus = "PAID";
 
-    currentOrder.payment.paymentId = razorpayPaymentId;
-
-    currentOrder.payment.signature = razorpaySignature;
-
-    currentOrder.payment.paidAt = new Date();
-
-    currentOrder.payment.failureReason = "";
+    order.payment.paymentId = razorpayPayment.id;
 
     /*
-     * ======================================
-     * 14. Confirm order
-     * ======================================
+     * Frontend verification has a Razorpay
+     * payment signature.
+     *
+     * Webhook does not use this same field.
+     */
+    if (razorpaySignature) {
+      order.payment.signature = razorpaySignature;
+    }
+
+    order.payment.paidAt = new Date();
+
+    order.payment.failureReason = "";
+
+    /*
+     * ========================================
+     * ORDER
+     * ========================================
      */
 
-    currentOrder.orderStatus = ORDER_STATUS.CONFIRMED;
+    order.orderStatus = ORDER_STATUS.CONFIRMED;
 
-    currentOrder.statusHistory.push({
+    order.statusHistory.push({
       status: ORDER_STATUS.CONFIRMED,
-
       timestamp: new Date(),
     });
 
-    await currentOrder.save({
+    const cart = await Cart.findOne({
+      user: order.user,
+    }).session(session);
+
+    if (cart) {
+      cart.items = [];
+
+      await cart.save({
+        session,
+      });
+    }
+
+    await order.save({
       session,
     });
-
-    /*
-     * ======================================
-     * 15. Commit
-     * ======================================
-     */
 
     await session.commitTransaction();
 
     return {
       success: true,
+      finalized: true,
       alreadyPaid: false,
-      order: currentOrder,
+      order,
     };
   } catch (error) {
     if (session.inTransaction()) {
@@ -1694,6 +1755,7 @@ const orderService = {
   placeCODOrder,
   placeOnlineOrder,
   verifyOnlinePayment,
+  finalizeOnlinePayment,
   getOrderById,
   getUserOrders,
   cancelOrder,

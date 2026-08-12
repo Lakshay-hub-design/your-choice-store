@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
+import webhookRoutes from "./routes/webhook.route.js";
 
 const app = express();
 
@@ -27,6 +28,8 @@ app.use(
     },
   })
 );
+
+app.use("/api/webhooks", webhookRoutes);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
