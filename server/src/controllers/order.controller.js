@@ -8,6 +8,7 @@ import verifyWebhookSignature from "../utils/verifyWebhookSignature.js";
 import processRazorpayWebhook from "../services/razorpayWebhook.service.js";
 
 import { sendSellerPaidOrderEmail } from "../features/notifications/services/sellerNotification.service.js";
+import { createAdminOrderNotification } from "../services/notification.service.js";
 
 const placeOrder = asyncHandler(async (req, res) => {
   const { addressId, paymentMethod } = req.body;
@@ -185,6 +186,12 @@ const razorpayWebhook = asyncHandler(async (req, res) => {
   if (result.finalized && result.order) {
     sendSellerPaidOrderEmail(result.order).catch((error) => {
       console.error("Seller webhook payment email failed:", error);
+    });
+
+    createAdminOrderNotification({
+      order: result.order,
+    }).catch((error) => {
+      console.error("Admin webhook notification failed:", error);
     });
   }
 

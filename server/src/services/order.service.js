@@ -18,6 +18,7 @@ import {
   sendSellerNewOrderEmail,
   sendSellerPaidOrderEmail,
 } from "../features/notifications/services/sellerNotification.service.js";
+import { createAdminOrderNotification } from "./notification.service.js";
 
 /**
  * Generate a unique, customer-friendly order number.
@@ -224,6 +225,12 @@ const verifyOnlinePayment = async ({
   if (result.finalized && result.order) {
     sendSellerPaidOrderEmail(result.order).catch((error) => {
       console.error("Seller paid-order email failed:", error);
+    });
+
+    createAdminOrderNotification({
+      order: result.order,
+    }).catch((error) => {
+      console.error("Admin notification failed:", error);
     });
   }
 
@@ -659,6 +666,12 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     sendSellerNewOrderEmail(order).catch((error) => {
       console.error("Seller order email failed:", error);
+    });
+
+    createAdminOrderNotification({
+      order,
+    }).catch((error) => {
+      console.error("Admin order notification failed:", error);
     });
 
     return order;
