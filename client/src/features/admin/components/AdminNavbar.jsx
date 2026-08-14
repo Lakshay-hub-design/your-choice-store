@@ -3,6 +3,7 @@
 import { Bell, Menu, UserRound } from "lucide-react";
 
 import useAuthStore from "@/store/authStore";
+import NotificationBell from "@/features/notifications/components/NotificationBell";
 
 export default function AdminNavbar({ onMenuClick }) {
   const user = useAuthStore((state) => state.user);
@@ -32,7 +33,7 @@ export default function AdminNavbar({ onMenuClick }) {
           aria-label="Notifications"
           className="relative flex h-10 w-10 items-center justify-center rounded-xl text-[#6B7280] hover:bg-[#F8F9FB]"
         >
-          <Bell size={19} />
+          <NotificationBell />
         </button>
 
         <div className="hidden h-7 w-px bg-[#E5E7EB] sm:block" />
