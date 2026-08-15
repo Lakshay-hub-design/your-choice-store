@@ -1,4 +1,6 @@
 import Notification from "../models/notification.model.js";
+import User from "../models/User.js";
+import { USER_ROLES } from "../constants/roles.js";
 
 const createNotification = async ({ recipient, type, title, message, data = {} }) => {
   const notification = await Notification.create({
