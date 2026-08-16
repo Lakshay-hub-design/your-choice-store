@@ -12,6 +12,11 @@ import {
   markNotificationAsRead,
 } from "../services/notificationService";
 
+import {
+  connectNotificationSocket,
+  disconnectNotificationSocket,
+} from "../socket/notificationSocket";
+
 export default function NotificationBell() {
   const router = useRouter();
 
@@ -162,6 +167,40 @@ export default function NotificationBell() {
       setMarkingAll(false);
     }
   };
+
+  useEffect(() => {
+    const socket = connectNotificationSocket();
+
+    const handleNewNotification = (notification) => {
+      /*
+       * Add newest notification to the top.
+       */
+      setNotifications((current) => [
+        notification,
+        ...current.filter((item) => item._id !== notification._id),
+      ]);
+
+      /*
+       * Increase unread count.
+       */
+      setUnreadCount((current) => current + 1);
+
+      /*
+       * Optional visual feedback.
+       */
+      toast.info(notification.title, {
+        description: notification.message,
+      });
+    };
+
+    socket.on("notification:new", handleNewNotification);
+
+    return () => {
+      socket.off("notification:new", handleNewNotification);
+
+      disconnectNotificationSocket();
+    };
+  }, []);
 
   return (
     <div ref={containerRef} className="relative">
