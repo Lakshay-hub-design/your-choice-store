@@ -5,6 +5,8 @@ import { Bell, CheckCheck, Package, Star, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import useAuthStore from "@/store/authStore";
+
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -31,6 +33,8 @@ export default function NotificationBell() {
   const [markingAll, setMarkingAll] = useState(false);
 
   const containerRef = useRef(null);
+
+  const accessToken = useAuthStore((state) => state.accessToken);
 
   /*
    * Load unread count when the dashboard
@@ -169,7 +173,7 @@ export default function NotificationBell() {
   };
 
   useEffect(() => {
-    const socket = connectNotificationSocket();
+    const socket = connectNotificationSocket(accessToken);
 
     const handleNewNotification = (notification) => {
       /*
@@ -200,7 +204,7 @@ export default function NotificationBell() {
 
       disconnectNotificationSocket();
     };
-  }, []);
+  }, [accessToken]);
 
   return (
     <div ref={containerRef} className="relative">

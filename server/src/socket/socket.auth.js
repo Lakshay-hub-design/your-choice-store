@@ -1,37 +1,22 @@
 import User from "../models/User.js";
+
 import { verifyAccessToken } from "../utils/token.js";
 
 export const authenticateSocket = async (socket, next) => {
   try {
     /*
-     * Socket.IO sends the browser cookies
-     * during the connection when credentials
-     * are enabled.
+     * Access token is sent by the frontend
+     * through the Socket.IO auth handshake.
      */
-    const cookieHeader = socket.handshake.headers.cookie;
-
-    if (!cookieHeader) {
-      return next(new Error("Unauthorized socket connection"));
-    }
-
-    /*
-     * Extract accessToken from cookies.
-     */
-    const accessToken = cookieHeader
-      .split(";")
-      .map((cookie) => cookie.trim())
-      .find((cookie) => cookie.startsWith("accessToken="))
-      ?.split("=")
-      .slice(1)
-      .join("=");
+    const accessToken = socket.handshake.auth?.accessToken;
 
     if (!accessToken) {
       return next(new Error("Unauthorized socket connection"));
     }
 
     /*
-     * Verify access token using the exact
-     * same mechanism as authenticate.js.
+     * Verify token using the same
+     * JWT verification used by HTTP APIs.
      */
     let decoded;
 
@@ -42,7 +27,7 @@ export const authenticateSocket = async (socket, next) => {
     }
 
     /*
-     * Load the latest user from database.
+     * Load current user from database.
      */
     const user = await User.findById(decoded.id);
 
@@ -50,6 +35,9 @@ export const authenticateSocket = async (socket, next) => {
       return next(new Error("User not found"));
     }
 
+    /*
+     * Same account checks as authenticate.js.
+     */
     if (!user.isActive) {
       return next(new Error("Account has been disabled"));
     }
@@ -61,11 +49,7 @@ export const authenticateSocket = async (socket, next) => {
     /*
      * Attach authenticated user to socket.
      *
-     * This is similar to:
-     *
-     * req.user = user
-     *
-     * in authenticate.js.
+     * Equivalent to req.user in HTTP.
      */
     socket.user = user;
 
