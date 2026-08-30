@@ -1,6 +1,7 @@
 import Notification from "../models/notification.model.js";
 import User from "../models/User.js";
 import { USER_ROLES } from "../constants/roles.js";
+import { getIO } from "../socket/socket.js";
 
 const createNotification = async ({ recipient, type, title, message, data = {} }) => {
   const notification = await Notification.create({
@@ -27,7 +28,7 @@ const createAdminOrderNotification = async ({ order }) => {
     return null;
   }
 
-  return createNotification({
+  const notification = await createNotification({
     recipient: admin._id,
 
     type: "NEW_ORDER",
@@ -42,6 +43,24 @@ const createAdminOrderNotification = async ({ order }) => {
       orderId: order._id,
     },
   });
+
+  /*
+   * Send real-time notification to the
+   * authenticated admin's private room.
+   */
+  try {
+    const io = getIO();
+
+    io.to(`admin:${admin._id}`).emit("notification:new", notification);
+  } catch (error) {
+    /*
+     * Socket failure must NOT affect
+     * the already-created notification.
+     */
+    console.error("Unable to emit socket notification:", error);
+  }
+
+  return notification;
 };
 
 const getNotifications = async ({ recipient, page = 1, limit = 10 }) => {

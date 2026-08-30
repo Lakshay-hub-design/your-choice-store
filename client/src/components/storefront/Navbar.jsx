@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronDown, Heart, Menu, Search, ShoppingCart, UserRound, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -392,7 +393,13 @@ function Logo({ compact = false }) {
   return (
     <Link href="/" className="flex shrink-0 items-center gap-2">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF5A5F]/10 text-xl">
-        🎁
+        <Image
+          src="/images/logo.png"
+          alt="YC Gifts & Toys Logo"
+          width={24}
+          height={24}
+          className="h-6 w-6 object-contain"
+        />
       </div>
 
       <div>

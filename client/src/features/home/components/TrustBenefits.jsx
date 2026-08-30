@@ -3,7 +3,7 @@ import { BadgeCheck, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 const benefits = [
   {
     title: "Free Delivery",
-    description: "on orders above ₹499",
+    description: "on orders above ₹1499",
     icon: Truck,
     iconClass: "text-[#FF5A5F] bg-[#FF5A5F]/10",
   },

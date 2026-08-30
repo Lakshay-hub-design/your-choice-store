@@ -23,7 +23,7 @@ export default function ProductSection({ title, description, products = [], href
       </div>
 
       {/* Desktop */}
-      <div className="hidden grid-cols-4 gap-5 lg:grid">
+      <div className="hidden grid-cols-5 gap-5 lg:grid">
         {products.map((product) => (
           <ProductCard key={product._id} product={product} />
         ))}

@@ -1,51 +1,52 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const categories = [
   {
     name: "Personalized Gifts",
-    icon: "🎁",
+    image: "/images/categories/gift.png",
     href: "/products?category=personalized-gifts",
     background: "bg-[#FFF3D6]",
   },
   {
     name: "Soft Toys",
-    icon: "🧸",
+    image: "/images/categories/teady.png",
     href: "/products?category=soft-toys",
     background: "bg-[#FFF0E6]",
   },
   {
     name: "Toys & Games",
-    icon: "🚗",
+    image: "/images/categories/car.png",
     href: "/products?category=toys-games",
     background: "bg-[#EAF1FF]",
   },
   {
     name: "Home & Living",
-    icon: "☕",
+    image: "/images/categories/home.png",
     href: "/products?category=home-living",
     background: "bg-[#F0EAFE]",
   },
   {
     name: "Accessories",
-    icon: "💍",
+    image: "/images/categories/accessories.png",
     href: "/products?category=accessories",
     background: "bg-[#FFECEF]",
   },
   {
     name: "Stationery",
-    icon: "✏️",
+    image: "/images/categories/stationary.png",
     href: "/products?category=stationery",
     background: "bg-[#EEEAFE]",
   },
   {
     name: "Party Supplies",
-    icon: "🎉",
+    image: "/images/categories/party.png",
     href: "/products?category=party-supplies",
     background: "bg-[#FFF0EA]",
   },
   {
     name: "View All",
-    icon: "▦",
+    image: "/images/categories/all.png",
     href: "/categories",
     background: "bg-[#FFECEE]",
   },
@@ -78,13 +79,17 @@ function CategoryItem({ category }) {
       className="group flex min-w-[78px] flex-col items-center text-center"
     >
       <div
-        className={`flex h-[66px] w-[66px] items-center justify-center rounded-full text-[30px] transition duration-200 group-hover:-translate-y-1 group-hover:shadow-md sm:h-[72px] sm:w-[72px]`}
+        className={`flex h-[66px] w-[66px] items-center justify-center rounded-full transition duration-200 group-hover:-translate-y-1 group-hover:shadow-md sm:h-[72px] sm:w-[72px] ${category.background}`}
       >
-        <div
-          className={`flex h-full w-full items-center justify-center rounded-full ${category.background}`}
-        >
-          {category.icon}
-        </div>
+        {category.image && (
+          <Image
+            src={category.image}
+            alt={category.name}
+            width={54}
+            height={54}
+            className="h-[54px] w-[54px] object-contain transition-transform duration-200 group-hover:scale-105"
+          />
+        )}
       </div>
 
       <span className="mt-2 max-w-[90px] text-[10px] leading-4 font-semibold text-[#242424] sm:text-[11px]">

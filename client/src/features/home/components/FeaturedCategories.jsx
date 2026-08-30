@@ -30,13 +30,14 @@ function CategoryCard({ category }) {
   return (
     <Link
       href={`/products?category=${category.slug}`}
-      className="group relative min-h-[175px] overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white sm:min-h-[220px]"
+      className="group relative block overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white"
+      style={{ aspectRatio: "4 / 5" }}
     >
       {image ? (
         <img
           src={image}
           alt={category.name}
-          className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          className="absolute inset-0 h-full w-full object-cover object-center transition duration-500 group-hover:scale-105"
         />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-[#FFE7E2] to-[#FFF5F2]" />

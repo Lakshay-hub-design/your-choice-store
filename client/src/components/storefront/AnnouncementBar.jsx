@@ -7,7 +7,7 @@ export default function AnnouncementBar() {
         <div className="flex items-center gap-1.5">
           <Truck size={13} className="text-[#FF5A5F]" />
 
-          <span>Free Delivery on orders above ₹499</span>
+          <span>Free Delivery on orders above ₹1499</span>
         </div>
 
         <div className="hidden items-center gap-1.5 md:flex">
