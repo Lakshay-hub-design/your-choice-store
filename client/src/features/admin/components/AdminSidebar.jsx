@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Users,
   X,
+  RefreshCcw,
 } from "lucide-react";
 
 const navigation = [
@@ -38,6 +39,11 @@ const navigation = [
     label: "Customers",
     href: "/admin/customers",
     icon: Users,
+  },
+  {
+    label: "Returns & Issues",
+    href: "/admin/returns",
+    icon: RefreshCcw,
   },
 ];
 

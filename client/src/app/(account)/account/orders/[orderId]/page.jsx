@@ -24,6 +24,7 @@ import OrderReviewActions from "@/features/reviews/components/OrderReviewActions
 import { toast } from "sonner";
 
 import CancelOrderModal from "@/features/orders/components/CancelOrderModal";
+import ReturnRequestForm from "@/components/storefront/orders/ReturnRequestForm";
 
 export default function OrderDetailsPage({ params }) {
   const { orderId } = use(params);
@@ -39,6 +40,8 @@ export default function OrderDetailsPage({ params }) {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const [cancelError, setCancelError] = useState("");
+
+  const [returnFormOpen, setReturnFormOpen] = useState(false);
   let cancelled = false;
 
   const loadOrder = async () => {
@@ -121,6 +124,41 @@ export default function OrderDetailsPage({ params }) {
       <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
         <div className="space-y-5">
           <OrderProducts items={order.items} onReviewUpdated={loadOrder} />
+
+          {order.orderStatus === "DELIVERED" && !returnFormOpen && (
+            <button
+              type="button"
+              onClick={() => setReturnFormOpen(true)}
+              className="w-full rounded-2xl border border-[#EDE9E6] bg-white p-5 text-left transition hover:border-[#FF5A5F]/40 hover:shadow-sm sm:p-6"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-bold text-[#242424]">Report an Issue</h2>
+
+                  <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                    Received a damaged, defective, wrong, or missing item? Let us know.
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-xl bg-[#FF5A5F]/10 px-4 py-2 text-xs font-semibold text-[#FF5A5F]">
+                  Report
+                </span>
+              </div>
+            </button>
+          )}
+
+          {returnFormOpen && (
+            <ReturnRequestForm
+              order={order}
+              onSuccess={() => {
+                setReturnFormOpen(false);
+                toast.success("Issue reported successfully.");
+              }}
+              onCancel={() => {
+                setReturnFormOpen(false);
+              }}
+            />
+          )}
 
           <DeliveryAddress address={order.shippingAddress} />
         </div>

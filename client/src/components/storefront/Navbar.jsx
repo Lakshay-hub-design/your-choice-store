@@ -398,13 +398,15 @@ function Logo({ compact = false }) {
           alt="YC Gifts & Toys Logo"
           width={24}
           height={24}
-          className="h-6 w-6 object-contain"
+          className="h-8 w-8 object-contain"
         />
       </div>
 
       <div>
         <div className={`font-extrabold tracking-tight ${compact ? "text-sm" : "text-lg"}`}>
-          <span className="text-[#FF5A5F]">YC</span>{" "}
+          <span className="bg-gradient-to-r from-[#C026D3] via-[#EC1B69] to-[#FF3366] bg-clip-text text-transparent">
+            YC
+          </span>{" "}
           <span className="text-[#242424]">GIFTS & TOYS</span>
         </div>
 
