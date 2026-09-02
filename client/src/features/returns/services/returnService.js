@@ -19,3 +19,12 @@ export const createReturnRequest = async ({ orderId, items, reason, description,
 
   return response.data.data;
 };
+
+export const markReturnAsShipped = async ({ returnId, courierName, trackingNumber }) => {
+  const response = await api.patch(`/returns/${returnId}/shipped`, {
+    courierName,
+    trackingNumber,
+  });
+
+  return response.data.data;
+};

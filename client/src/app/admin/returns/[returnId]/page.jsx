@@ -13,14 +13,19 @@ import {
   Package,
   Phone,
   User,
+  PackageCheck,
   XCircle,
+  Truck,
 } from "lucide-react";
 
 import {
   getReturnRequestById,
   approveReturnRequest,
   rejectReturnRequest,
+  markReturnAsReceived,
 } from "@/features/returns/services/adminReturnService";
+
+import ReturnInspection from "@/features/returns/components/ReturnInspection";
 
 const statusStyles = {
   PENDING: "border-amber-200 bg-amber-50 text-amber-700",
@@ -58,6 +63,14 @@ export default function ReturnDetailsPage() {
 
   const [error, setError] = useState("");
 
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [actionError, setActionError] = useState("");
+
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+
+  const [adminNote, setAdminNote] = useState("");
+
   useEffect(() => {
     if (!returnId) return;
 
@@ -80,6 +93,63 @@ export default function ReturnDetailsPage() {
 
     loadReturn();
   }, [returnId]);
+
+  const handleApprove = async () => {
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      const updated = await approveReturnRequest(returnRequest._id, adminNote);
+
+      setReturnRequest(updated);
+
+      setAdminNote("");
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "Unable to approve return request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!adminNote.trim()) {
+      setActionError("Please enter a rejection reason.");
+
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      const updated = await rejectReturnRequest(returnRequest._id, adminNote);
+
+      setReturnRequest(updated);
+
+      setRejectModalOpen(false);
+
+      setAdminNote("");
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "Unable to reject return request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleMarkReceived = async () => {
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      const updated = await markReturnAsReceived(returnRequest._id);
+
+      setReturnRequest(updated);
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "Unable to mark return as received.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -168,8 +238,13 @@ export default function ReturnDetailsPage() {
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
               type="button"
-              disabled
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-600 opacity-60"
+              disabled={actionLoading}
+              onClick={() => {
+                setActionError("");
+                setAdminNote("");
+                setRejectModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <XCircle size={17} />
               Reject Return
@@ -177,10 +252,15 @@ export default function ReturnDetailsPage() {
 
             <button
               type="button"
-              disabled
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white opacity-60"
+              disabled={actionLoading}
+              onClick={handleApprove}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <CheckCircle2 size={17} />
+              {actionLoading ? (
+                <Loader2 size={17} className="animate-spin" />
+              ) : (
+                <CheckCircle2 size={17} />
+              )}
               Approve Return
             </button>
           </div>
@@ -191,6 +271,22 @@ export default function ReturnDetailsPage() {
         </div>
       )}
 
+      {returnRequest.status === "RETURN_IN_TRANSIT" && (
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={handleMarkReceived}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#7C5CFC] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#6848e8] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {actionLoading ? (
+            <Loader2 size={17} className="animate-spin" />
+          ) : (
+            <PackageCheck size={17} />
+          )}
+          Mark Return Received
+        </button>
+      )}
+
       {/* Main grid */}
 
       <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -199,9 +295,41 @@ export default function ReturnDetailsPage() {
         <div className="space-y-5">
           <ReturnItems items={returnRequest.items} />
 
-          <IssueDetails reason={returnRequest.reason} description={returnRequest.description} />
+          <IssueDetails
+            reason={returnRequest.reason}
+            description={returnRequest.description}
+            actionError={actionError}
+          />
 
           <Evidence images={returnRequest.images} />
+
+          {returnRequest.status === "RETURN_RECEIVED" && (
+            <ReturnInspection
+              returnId={returnRequest._id}
+              onSuccess={(updated) => setReturnRequest(updated)}
+            />
+          )}
+
+          {returnRequest.status === "INSPECTED" && returnRequest.inspection && (
+            <div className="rounded-2xl border border-[#EDE9E6] bg-white p-5">
+              <h2 className="text-lg font-semibold text-[#242424]">Inspection Result</h2>
+
+              <div className="mt-4 space-y-3">
+                <InfoRow label="Result" value={returnRequest.inspection.result} />
+
+                <InfoRow label="Note" value={returnRequest.inspection.note || "—"} />
+
+                <InfoRow
+                  label="Inspected At"
+                  value={
+                    returnRequest.inspection.inspectedAt
+                      ? formatDate(returnRequest.inspection.inspectedAt)
+                      : "—"
+                  }
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right */}
@@ -214,6 +342,51 @@ export default function ReturnDetailsPage() {
           <ReturnInformation returnRequest={returnRequest} />
         </div>
       </div>
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-[#242424]">Reject Return Request</h2>
+
+            <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+              Please provide a reason for rejecting this customer's request.
+            </p>
+
+            <textarea
+              value={adminNote}
+              onChange={(event) => setAdminNote(event.target.value)}
+              placeholder="Enter rejection reason..."
+              rows={4}
+              className="mt-5 w-full resize-none rounded-xl border border-[#EDE9E6] bg-[#FFF9F5] px-4 py-3 text-sm text-[#242424] transition outline-none focus:border-[#FF5A5F]"
+            />
+
+            {actionError && <p className="mt-2 text-xs text-red-500">{actionError}</p>}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setRejectModalOpen(false)}
+                className="flex-1 rounded-xl border border-[#EDE9E6] px-4 py-3 text-sm font-semibold text-[#242424]"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={actionLoading || !adminNote.trim()}
+                onClick={handleReject}
+                className="flex-1 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionLoading ? (
+                  <Loader2 size={17} className="mx-auto animate-spin" />
+                ) : (
+                  "Reject Return"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -275,7 +448,7 @@ function ReturnItems({ items = [] }) {
  * ==========================================
  */
 
-function IssueDetails({ reason, description }) {
+function IssueDetails({ reason, description, actionError }) {
   return (
     <section className="rounded-2xl border border-[#EDE9E6] bg-white p-5">
       <h2 className="font-bold text-[#242424]">Customer Issue</h2>
@@ -293,6 +466,11 @@ function IssueDetails({ reason, description }) {
           <p className="text-sm leading-6 whitespace-pre-wrap text-[#4B5563]">{description}</p>
         </div>
       </div>
+      {actionError && !rejectModalOpen && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-xs text-red-600">{actionError}</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -408,28 +586,78 @@ function OrderCard({ order }) {
  */
 
 function ReturnInformation({ returnRequest }) {
+  const shipping = returnRequest?.returnShipment;
+
   return (
-    <section className="rounded-2xl border border-[#EDE9E6] bg-white p-5">
-      <h2 className="font-bold text-[#242424]">Return Information</h2>
+    <>
+      {/* Return Information */}
+      <section className="rounded-2xl border border-[#EDE9E6] bg-white p-5">
+        <h2 className="font-bold text-[#242424]">Return Information</h2>
 
-      <div className="mt-5 space-y-3">
-        <InfoRow label="Return ID" value={returnRequest.returnNumber} />
+        <div className="mt-5 space-y-3">
+          <InfoRow label="Return ID" value={returnRequest.returnNumber} />
 
-        <InfoRow label="Status" value={formatStatus(returnRequest.status)} />
+          <InfoRow label="Status" value={formatStatus(returnRequest.status)} />
 
-        <InfoRow
-          label="Resolution"
-          value={returnRequest.resolution ? formatStatus(returnRequest.resolution) : "Not decided"}
-        />
+          <InfoRow
+            label="Resolution"
+            value={
+              returnRequest.resolution ? formatStatus(returnRequest.resolution) : "Not decided"
+            }
+          />
 
-        <InfoRow
-          label="Refund"
-          value={
-            returnRequest.refund?.status ? formatStatus(returnRequest.refund.status) : "Not started"
-          }
-        />
-      </div>
-    </section>
+          <InfoRow
+            label="Refund"
+            value={
+              returnRequest.refund?.status
+                ? formatStatus(returnRequest.refund.status)
+                : "Not started"
+            }
+          />
+        </div>
+      </section>
+
+      {/* Return Shipment */}
+      {shipping?.trackingNumber && (
+        <section className="rounded-2xl border border-[#EDE9E6] bg-white p-5">
+          <div className="flex items-center gap-2">
+            <Truck size={18} className="text-[#7C5CFC]" />
+
+            <h2 className="font-bold text-[#242424]">Return Shipment</h2>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <InfoRow label="Courier" value={shipping.courier} />
+
+            <InfoRow label="Tracking Number" value={shipping.trackingNumber} />
+
+            <InfoRow label="Shipped At" value={formatDateTime(shipping.shippedAt)} />
+
+            <InfoRow label="Received At" value={formatDateTime(shipping.receivedAt)} />
+          </div>
+
+          {returnRequest.status === "RETURN_IN_TRANSIT" && (
+            <div className="mt-5 rounded-xl bg-purple-50 p-4">
+              <p className="text-xs font-semibold text-purple-700">Return is in transit</p>
+
+              <p className="mt-1 text-[11px] leading-5 text-purple-600">
+                The customer has shipped the product and it is currently on its way to you.
+              </p>
+            </div>
+          )}
+
+          {returnRequest.status === "RETURN_RECEIVED" && (
+            <div className="mt-5 rounded-xl bg-indigo-50 p-4">
+              <p className="text-xs font-semibold text-indigo-700">Return received</p>
+
+              <p className="mt-1 text-[11px] leading-5 text-indigo-600">
+                The returned product has been received and is ready for inspection.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+    </>
   );
 }
 
@@ -528,146 +756,4 @@ function formatDateTime(date) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-                )
-              : "Not decided"
-          }
-        />
-
-        <InfoRow
-          label="Refund"
-          value={
-            returnRequest.refund?.status
-              ? formatStatus(
-                  returnRequest.refund
-                    .status
-                )
-              : "Not started"
-          }
-        />
-      </div>
-    </section>
-  );
-}
-
-/*
- * ==========================================
- * Contact row
- * ==========================================
- */
-
-function ContactRow({
-  icon: Icon,
-  value,
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <Icon
-        size={15}
-        className="shrink-0 text-[#9CA3AF]"
-      />
-
-      <span className="min-w-0 truncate text-xs text-[#6B7280]">
-        {value || "Not provided"}
-      </span>
-    </div>
-  );
-}
-
-/*
- * ==========================================
- * Info row
- * ==========================================
- */
-
-function InfoRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs text-[#9CA3AF]">
-        {label}
-      </span>
-
-      <span className="text-right text-xs font-semibold text-[#242424]">
-        {value || "—"}
-      </span>
-    </div>
-  );
-}
-
-/*
- * ==========================================
- * Status badge
- * ==========================================
- */
-
-function StatusBadge({ status }) {
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-bold ${
-        statusStyles[status] ||
-        "border-gray-200 bg-gray-50 text-gray-600"
-      }`}
-    >
-      {formatStatus(status)}
-    </span>
-  );
-}
-
-/*
- * ==========================================
- * Helpers
- * ==========================================
- */
-
-function formatReason(reason) {
-  const labels = {
-    DAMAGED: "Damaged",
-    WRONG_PRODUCT: "Wrong Product",
-    DEFECTIVE: "Defective",
-    MISSING_ITEM: "Missing Item",
-    NOT_AS_DESCRIBED:
-      "Not as Described",
-    OTHER: "Other",
-  };
-
-  return labels[reason] || reason || "—";
-}
-
-function formatStatus(status) {
-  if (!status) return "—";
-
-  return status
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) =>
-      letter.toUpperCase()
-    );
-}
-
-function formatDate(date) {
-  if (!date) return "—";
-
-  return new Date(date).toLocaleDateString(
-    "en-IN",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }
-  );
-}
-
-function formatDateTime(date) {
-  if (!date) return "—";
-
-  return new Date(date).toLocaleString(
-    "en-IN",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }
-  );
 }

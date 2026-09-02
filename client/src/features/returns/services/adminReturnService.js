@@ -17,3 +17,34 @@ export const getReturnRequestById = async (returnId) => {
 
   return response.data.data;
 };
+
+export const approveReturnRequest = async (returnId, adminNote = "") => {
+  const response = await api.patch(`/admin/returns/${returnId}/approve`, {
+    adminNote,
+  });
+
+  return response.data.data;
+};
+
+export const rejectReturnRequest = async (returnId, adminNote) => {
+  const response = await api.patch(`/admin/returns/${returnId}/reject`, {
+    adminNote,
+  });
+
+  return response.data.data;
+};
+
+export const markReturnAsReceived = async (returnId) => {
+  const response = await api.patch(`/admin/returns/${returnId}/received`);
+
+  return response.data.data;
+};
+
+export const inspectReturn = async ({ returnId, inspectionResult, inspectionNote }) => {
+  const response = await api.patch(`/admin/returns/${returnId}/inspect`, {
+    inspectionResult,
+    inspectionNote,
+  });
+
+  return response.data;
+};
