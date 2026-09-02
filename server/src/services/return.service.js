@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import Order from "../models/Order.js";
 import ReturnRequest from "../models/ReturnRequest.js";
+import { RETURN_STATUS } from "../models/ReturnRequest.js";
 
 import ApiError from "../utils/ApiError.js";
 import { generateReturnNumber } from "../utils/generateReturnNumber.js";
@@ -310,8 +311,219 @@ const getReturnRequestById = async (returnId) => {
   return returnRequest;
 };
 
+/*
+ * ==========================================
+ * Approve return request
+ * ==========================================
+ */
+
+const approveReturnRequest = async ({ returnId, adminId, adminNote = "" }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return request ID");
+  }
+
+  const returnRequest = await ReturnRequest.findById(returnId);
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  /*
+   * Only pending requests can be approved.
+   */
+
+  if (!["PENDING", "UNDER_REVIEW"].includes(returnRequest.status)) {
+    throw new ApiError(
+      409,
+      `Return request cannot be approved from ${returnRequest.status} status`
+    );
+  }
+
+  returnRequest.status = "APPROVED";
+
+  returnRequest.reviewedBy = adminId;
+
+  returnRequest.reviewedAt = new Date();
+
+  returnRequest.adminNote = adminNote.trim();
+
+  await returnRequest.save();
+
+  return returnRequest;
+};
+
+/*
+ * ==========================================
+ * Reject return request
+ * ==========================================
+ */
+
+const rejectReturnRequest = async ({ returnId, adminId, adminNote }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return request ID");
+  }
+
+  const returnRequest = await ReturnRequest.findById(returnId);
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  /*
+   * Only pending/review requests can
+   * be rejected.
+   */
+
+  if (!["PENDING", "UNDER_REVIEW"].includes(returnRequest.status)) {
+    throw new ApiError(
+      409,
+      `Return request cannot be rejected from ${returnRequest.status} status`
+    );
+  }
+
+  if (!adminNote?.trim()) {
+    throw new ApiError(400, "A rejection reason is required");
+  }
+
+  returnRequest.status = "REJECTED";
+
+  returnRequest.reviewedBy = adminId;
+
+  returnRequest.reviewedAt = new Date();
+
+  returnRequest.adminNote = adminNote.trim();
+
+  await returnRequest.save();
+
+  return returnRequest;
+};
+
+const markReturnAsShipped = async ({ returnId, userId, courierName, trackingNumber }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return request ID");
+  }
+
+  const returnRequest = await ReturnRequest.findOne({
+    _id: returnId,
+    user: userId,
+  });
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  /*
+   * Customer can only ship an
+   * APPROVED return.
+   */
+
+  if (returnRequest.status !== "APPROVED") {
+    throw new ApiError(409, "Only approved return requests can be marked as shipped");
+  }
+
+  if (!courierName?.trim()) {
+    throw new ApiError(400, "Courier name is required");
+  }
+
+  if (!trackingNumber?.trim()) {
+    throw new ApiError(400, "Tracking number is required");
+  }
+
+  returnRequest.status = "RETURN_IN_TRANSIT";
+
+  returnRequest.returnShipment = {
+    courier: courierName.trim(),
+
+    trackingNumber: trackingNumber.trim(),
+
+    shippedAt: new Date(),
+
+    receivedAt: null,
+  };
+
+  await returnRequest.save();
+
+  return returnRequest;
+};
+
+const markReturnAsReceived = async ({ returnId, adminId }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return request ID");
+  }
+
+  const returnRequest = await ReturnRequest.findById(returnId);
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  if (returnRequest.status !== "RETURN_IN_TRANSIT") {
+    throw new ApiError(
+      409,
+      `Return cannot be marked as received from ${returnRequest.status} status`
+    );
+  }
+
+  returnRequest.status = "RETURN_RECEIVED";
+
+  if (!returnRequest.returnShipping) {
+    returnRequest.returnShipping = {};
+  }
+
+  returnRequest.returnShipping.receivedAt = new Date();
+
+  returnRequest.receivedBy = adminId;
+
+  await returnRequest.save();
+
+  return returnRequest;
+};
+
+const inspectReturnRequest = async ({ returnId, inspectionResult, inspectionNote }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return ID");
+  }
+
+  const validResults = ["ACCEPTED", "DAMAGED", "USED", "WRONG_PRODUCT", "MISSING_PARTS", "OTHER"];
+
+  if (!validResults.includes(inspectionResult)) {
+    throw new ApiError(400, "Invalid inspection result");
+  }
+
+  const returnRequest = await ReturnRequest.findById(returnId);
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  if (returnRequest.status !== RETURN_STATUS.RETURN_RECEIVED) {
+    throw new ApiError(400, "Return can only be inspected after it has been received");
+  }
+
+  if (inspectionResult !== "ACCEPTED" && !inspectionNote?.trim()) {
+    throw new ApiError(400, "Inspection note is required for this inspection result");
+  }
+
+  returnRequest.inspection = {
+    result: inspectionResult,
+    note: inspectionNote?.trim() || "",
+    inspectedAt: new Date(),
+  };
+
+  returnRequest.status = RETURN_STATUS.INSPECTED;
+
+  await returnRequest.save();
+
+  return returnRequest;
+};
+
 export default {
   createReturnRequest,
   getReturnRequests,
   getReturnRequestById,
+  approveReturnRequest,
+  rejectReturnRequest,
+  markReturnAsShipped,
+  markReturnAsReceived,
+  inspectReturnRequest,
 };

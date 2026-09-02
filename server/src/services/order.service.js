@@ -9,6 +9,7 @@ import Review from "../models/Review.js";
 import ApiError from "../utils/ApiError.js";
 
 import cartPricingService from "./cartPricing.service.js";
+import ReturnRequest from "../models/ReturnRequest.js";
 
 import { createRazorpayOrder, getRazorpayPayment } from "./payment.service.js";
 
@@ -1218,6 +1219,13 @@ const getOrderById = async ({ userId, orderId }) => {
    * into plain object.
    */
   const orderObject = order.toObject();
+
+  const returnRequest = await ReturnRequest.findOne({
+    order: order._id,
+    user: userId,
+  }).lean();
+
+  orderObject.returnRequest = returnRequest || null;
 
   /*
    * Add review information to

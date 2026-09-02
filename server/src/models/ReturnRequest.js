@@ -271,6 +271,12 @@ const returnRequestSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    receivedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     approvedAt: {
       type: Date,
       default: null,

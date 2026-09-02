@@ -46,3 +46,102 @@ export const getReturnRequestById = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, "Return request fetched successfully", returnRequest));
 });
+
+/*
+ * ==========================================
+ * Approve return
+ * ==========================================
+ */
+
+export const approveReturnRequest = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const { adminNote = "" } = req.body;
+
+  const returnRequest = await returnService.approveReturnRequest({
+    returnId,
+
+    adminId: req.user._id,
+
+    adminNote,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Return request approved successfully", returnRequest));
+});
+
+/*
+ * ==========================================
+ * Reject return
+ * ==========================================
+ */
+
+export const rejectReturnRequest = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const { adminNote } = req.body;
+
+  const returnRequest = await returnService.rejectReturnRequest({
+    returnId,
+
+    adminId: req.user._id,
+
+    adminNote,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Return request rejected successfully", returnRequest));
+});
+
+export const markReturnAsShipped = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const { courierName, trackingNumber } = req.body;
+
+  const returnRequest = await returnService.markReturnAsShipped({
+    returnId,
+
+    userId: req.user._id,
+
+    courierName,
+
+    trackingNumber,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Return marked as shipped successfully", returnRequest));
+});
+
+export const markReturnAsReceived = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const returnRequest = await returnService.markReturnAsReceived({
+    returnId,
+    adminId: req.user._id,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Return marked as received successfully", returnRequest));
+});
+
+export const inspectReturn = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const { inspectionResult, inspectionNote } = req.body;
+
+  const returnRequest = await inspectReturnRequest({
+    returnId,
+    inspectionResult,
+    inspectionNote,
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Return inspection completed",
+    data: returnRequest,
+  });
+});

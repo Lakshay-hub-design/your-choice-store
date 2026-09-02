@@ -33,3 +33,19 @@ export const createReturnRequestSchema = z.object({
       .max(2000, "Description cannot exceed 2000 characters"),
   }),
 });
+
+export const markReturnShippedSchema = z.object({
+  body: z.object({
+    courierName: z
+      .string()
+      .trim()
+      .min(2, "Courier name is required")
+      .max(100, "Courier name is too long"),
+
+    trackingNumber: z
+      .string()
+      .trim()
+      .min(3, "Tracking number is required")
+      .max(100, "Tracking number is too long"),
+  }),
+});

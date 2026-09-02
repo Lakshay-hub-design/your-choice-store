@@ -2,8 +2,18 @@ import express from "express";
 
 import authenticate from "../../middlewares/authenticate.js";
 import authorize from "../../middlewares/authorize.js";
+import validate from "../../middlewares/validate.js";
 
-import { getReturnRequests, getReturnRequestById } from "../../controllers/return.controller.js";
+import {
+  getReturnRequests,
+  getReturnRequestById,
+  approveReturnRequest,
+  rejectReturnRequest,
+  markReturnAsReceived,
+  inspectReturn,
+} from "../../controllers/return.controller.js";
+
+import { approveReturnSchema, rejectReturnSchema } from "../../validators/adminReturn.validator.js";
 
 const router = express.Router();
 
@@ -21,5 +31,13 @@ router.get("/", getReturnRequests);
  */
 
 router.get("/:returnId", getReturnRequestById);
+
+router.patch("/:returnId/approve", validate(approveReturnSchema), approveReturnRequest);
+
+router.patch("/:returnId/reject", validate(rejectReturnSchema), rejectReturnRequest);
+
+router.patch("/:returnId/received", markReturnAsReceived);
+
+router.patch("/:returnId/inspect", authenticate, authorize("admin"), inspectReturn);
 
 export default router;
