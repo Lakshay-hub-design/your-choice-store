@@ -195,7 +195,7 @@ export default function RazorpayCheckout({ payment, order, customer, onSuccess, 
       type="button"
       onClick={openCheckout}
       disabled={loading}
-      className="flex w-full items-center justify-center rounded-xl bg-[#FF5A5F] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#f04f54] disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex w-full items-center justify-center rounded-xl bg-[#ed6267] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#f04f54] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {loading
         ? "Opening Payment..."

@@ -19,6 +19,8 @@ import ProductOrganizationSection from "./ProductOrganizationSection";
 import ProductCustomizationSection from "./ProductCustomizationSection";
 import ProductVisibilitySection from "./ProductVisibilitySection";
 import ProductFormActions from "./ProductFormActions";
+import ShippingInformationSection from "./ShippingInformationSection";
+import ProductTaxSection from "./ProductTaxSection";
 
 export default function ProductForm({
   mode = "create",
@@ -116,6 +118,30 @@ export default function ProductForm({
     }));
   };
 
+  const updateShipping = (key, value) => {
+    setForm((current) => ({
+      ...current,
+
+      shipping: {
+        ...current.shipping,
+
+        [key]: value,
+      },
+    }));
+  };
+
+  const updateTax = (value) => {
+    setForm((current) => ({
+      ...current,
+
+      tax: {
+        ...current.tax,
+
+        rate: value,
+      },
+    }));
+  };
+
   /* ================================
      IMAGES
   ================================= */
@@ -175,6 +201,42 @@ export default function ProductForm({
       return "Please enter valid stock.";
     }
 
+    const taxRate = Number(form.tax?.rate);
+
+    const allowedTaxRates = [0, 3, 5, 12, 18, 28];
+
+    if (!allowedTaxRates.includes(taxRate)) {
+      return "Please select a valid GST rate.";
+    }
+
+    /*
+     * Shipping validation
+     */
+
+    const weight = Number(form.shipping?.weight);
+
+    const length = Number(form.shipping?.dimensions?.length);
+
+    const breadth = Number(form.shipping?.dimensions?.breadth);
+
+    const height = Number(form.shipping?.dimensions?.height);
+
+    if (!Number.isFinite(weight) || weight <= 0) {
+      return "Please enter a valid shipping weight.";
+    }
+
+    if (!Number.isFinite(length) || length <= 0) {
+      return "Please enter a valid package length.";
+    }
+
+    if (!Number.isFinite(breadth) || breadth <= 0) {
+      return "Please enter a valid package breadth.";
+    }
+
+    if (!Number.isFinite(height) || height <= 0) {
+      return "Please enter a valid package height.";
+    }
+
     const remainingExisting = existingImages.filter(
       (image) => !removedImages.includes(image.fileId)
     ).length;
@@ -219,7 +281,7 @@ export default function ProductForm({
         images,
         removedImages,
       });
-
+      console.log("PRODUCT FORM:", form);
       await onSubmit(formData);
     } catch (error) {
       const message =
@@ -281,6 +343,10 @@ export default function ProductForm({
         />
 
         <PricingInventorySection form={form} updateField={updateField} />
+
+        <ProductTaxSection tax={form.tax} updateTax={updateTax} />
+
+        <ShippingInformationSection shipping={form.shipping} updateShipping={updateShipping} />
 
         <ProductImagesSection
           existingImages={existingImages}
