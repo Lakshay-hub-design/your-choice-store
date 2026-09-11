@@ -517,6 +517,69 @@ const inspectReturnRequest = async ({ returnId, inspectionResult, inspectionNote
   return returnRequest;
 };
 
+const calculateReturnRefundAmount = (returnRequest, order) => {
+  return returnRequest.items.reduce((total, item) => {
+    return total + Number(item.price || 0) * Number(item.quantity || 0);
+  }, 0);
+};
+
+const processReturnRefund = async ({ returnId, adminId }) => {
+  if (!mongoose.Types.ObjectId.isValid(returnId)) {
+    throw new ApiError(400, "Invalid return ID");
+  }
+
+  const returnRequest = await ReturnRequest.findById(returnId).populate("order");
+
+  if (!returnRequest) {
+    throw new ApiError(404, "Return request not found");
+  }
+
+  if (returnRequest.status !== RETURN_STATUS.INSPECTED) {
+    throw new ApiError(400, "Refund can only be processed after inspection");
+  }
+
+  if (returnRequest.inspection?.result !== "ACCEPTED") {
+    throw new ApiError(400, "Refund cannot be processed because the inspection was not accepted");
+  }
+
+  if (
+    returnRequest.refund?.status === "PROCESSING" ||
+    returnRequest.refund?.status === "COMPLETED"
+  ) {
+    throw new ApiError(400, "Refund has already been processed or is currently being processed");
+  }
+
+  const order = returnRequest.order;
+
+  if (!order) {
+    throw new ApiError(404, "Associated order not found");
+  }
+
+  const refundAmount = calculateReturnRefundAmount(returnRequest, order);
+
+  if (refundAmount <= 0) {
+    throw new ApiError(400, "Refund amount must be greater than zero");
+  }
+
+  // Prevent duplicate processing
+  returnRequest.status = RETURN_STATUS.REFUND_PROCESSING;
+
+  returnRequest.refund = {
+    ...returnRequest.refund,
+    status: "PROCESSING",
+    amount: refundAmount,
+    provider: order.paymentMethod === "ONLINE" ? "RAZORPAY" : "MANUAL",
+    failureReason: "",
+  };
+
+  await returnRequest.save();
+
+  return {
+    returnRequest,
+    refundAmount,
+  };
+};
+
 export default {
   createReturnRequest,
   getReturnRequests,
@@ -526,4 +589,5 @@ export default {
   markReturnAsShipped,
   markReturnAsReceived,
   inspectReturnRequest,
+  processReturnRefund,
 };

@@ -21,6 +21,7 @@ import {
 } from "../features/notifications/services/sellerNotification.service.js";
 import { createAdminOrderNotification } from "./notification.service.js";
 
+import shippingService from "../features/shipping/services/shipping.service.js";
 /**
  * Generate a unique, customer-friendly order number.
  *
@@ -575,6 +576,20 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
       country: address.country || "India",
     };
 
+    const shippingQuote = await shippingService.getShippingQuote({
+      products,
+      cart,
+      deliveryPostcode: address.postalCode,
+    });
+
+    const finalPricing = {
+      ...pricing,
+
+      shippingFee: shippingQuote.shippingFee,
+
+      grandTotal: pricing.itemsTotal + shippingQuote.shippingFee,
+    };
+
     /*
      * 6. Create order.
      */
@@ -593,7 +608,7 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
 
           shippingAddress,
 
-          pricing,
+          pricing: finalPricing,
 
           paymentMethod: "COD",
 
@@ -835,6 +850,20 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
     throw new ApiError(400, "Invalid order amount.");
   }
 
+  const shippingQuote = await shippingService.getShippingQuote({
+    products,
+    cart,
+    deliveryPostcode: address.postalCode,
+  });
+
+  const finalPricing = {
+    ...pricing,
+
+    shippingFee: shippingQuote.shippingFee,
+
+    grandTotal: pricing.itemsTotal + shippingQuote.shippingFee,
+  };
+
   /*
    * ============================================
    * 6. Generate our order number
@@ -857,7 +886,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
   const razorpayOrder = await createRazorpayOrder({
     orderId: orderNumber,
 
-    amount: pricing.grandTotal,
+    amount: finalPricing.grandTotal,
   });
 
   /*
@@ -958,12 +987,43 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
       });
 
     /*
-     * Prevent paying an amount calculated
-     * from a cart that changed while the
-     * Razorpay order was being created.
+     * Recalculate shipping for the current cart.
+     *
+     * This makes sure the order pricing saved
+     * in MongoDB matches the amount that will
+     * be paid through Razorpay.
      */
-    if (currentPricing.grandTotal !== pricing.grandTotal) {
-      throw new ApiError(409, "Your cart changed. Please refresh checkout and try again.");
+    const currentShippingQuote = await shippingService.getShippingQuote({
+      products: currentProducts,
+      cart: currentCart,
+      deliveryPostcode: address.postalCode,
+      paymentMethod: "ONLINE",
+    });
+
+    const currentFinalPricing = {
+      ...currentPricing,
+
+      shippingFee: currentShippingQuote.shippingFee,
+
+      grandTotal: currentPricing.itemsTotal + currentShippingQuote.shippingFee,
+    };
+
+    /*
+     * Prevent paying an amount calculated
+     * from a cart/shipping state that changed
+     * while the Razorpay order was being created.
+     */
+    if (
+      currentFinalPricing.itemsTotal !== finalPricing.itemsTotal ||
+      currentFinalPricing.discount !== finalPricing.discount ||
+      currentFinalPricing.tax !== finalPricing.tax ||
+      currentFinalPricing.shippingFee !== finalPricing.shippingFee ||
+      currentFinalPricing.grandTotal !== finalPricing.grandTotal
+    ) {
+      throw new ApiError(
+        409,
+        "Your cart or delivery charges changed. Please refresh checkout and try again."
+      );
     }
 
     /*
@@ -1052,7 +1112,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
           shippingAddress,
 
-          pricing: currentPricing,
+          pricing: currentFinalPricing,
 
           paymentMethod: "ONLINE",
 

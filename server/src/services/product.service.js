@@ -337,7 +337,55 @@ const updateProduct = async (id, updateData, files = []) => {
 
   /*
    * --------------------------------
-   * 4. Determine removed images
+   * 4. Validate shipping information
+   * --------------------------------
+   */
+
+  if (updateData.shipping !== undefined) {
+    const { weight, dimensions } = updateData.shipping;
+
+    if (weight !== undefined) {
+      const parsedWeight = Number(weight);
+
+      if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+        throw new ApiError(400, "Shipping weight must be greater than 0.");
+      }
+
+      updateData.shipping.weight = parsedWeight;
+    }
+
+    if (dimensions !== undefined) {
+      const { length, breadth, height } = dimensions;
+
+      if (length !== undefined || breadth !== undefined || height !== undefined) {
+        const parsedLength = Number(length);
+        const parsedBreadth = Number(breadth);
+        const parsedHeight = Number(height);
+
+        if (!Number.isFinite(parsedLength) || parsedLength <= 0) {
+          throw new ApiError(400, "Shipping length must be greater than 0.");
+        }
+
+        if (!Number.isFinite(parsedBreadth) || parsedBreadth <= 0) {
+          throw new ApiError(400, "Shipping breadth must be greater than 0.");
+        }
+
+        if (!Number.isFinite(parsedHeight) || parsedHeight <= 0) {
+          throw new ApiError(400, "Shipping height must be greater than 0.");
+        }
+
+        updateData.shipping.dimensions = {
+          length: parsedLength,
+          breadth: parsedBreadth,
+          height: parsedHeight,
+        };
+      }
+    }
+  }
+
+  /*
+   * --------------------------------
+   * 5. Determine removed images
    * --------------------------------
    */
 
@@ -361,7 +409,7 @@ const updateProduct = async (id, updateData, files = []) => {
 
   /*
    * --------------------------------
-   * 5. Upload new images
+   * 6. Upload new images
    * --------------------------------
    */
 
@@ -376,7 +424,7 @@ const updateProduct = async (id, updateData, files = []) => {
 
     /*
      * --------------------------------
-     * 6. Build final image list
+     * 7. Build final image list
      * --------------------------------
      */
 
@@ -392,7 +440,7 @@ const updateProduct = async (id, updateData, files = []) => {
 
     /*
      * --------------------------------
-     * 7. Update product
+     * 8. Update product
      * --------------------------------
      */
 
@@ -404,7 +452,7 @@ const updateProduct = async (id, updateData, files = []) => {
 
     /*
      * --------------------------------
-     * 8. Delete removed images
+     * 9. Delete removed images
      * --------------------------------
      *
      * Do this AFTER MongoDB save succeeds.
@@ -414,15 +462,6 @@ const updateProduct = async (id, updateData, files = []) => {
       try {
         await deleteImages(imagesToRemove.map((image) => image.fileId));
       } catch (error) {
-        /*
-         * Don't fail the whole request.
-         *
-         * MongoDB already contains the
-         * correct product state.
-         *
-         * These would only be orphaned
-         * storage files.
-         */
         console.error("Unable to delete removed product images:", error);
       }
     }
@@ -432,9 +471,6 @@ const updateProduct = async (id, updateData, files = []) => {
     /*
      * If updating the product failed,
      * delete only newly uploaded images.
-     *
-     * Existing product images have NOT
-     * been deleted yet.
      */
 
     if (uploadedImages.length) {

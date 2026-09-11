@@ -133,7 +133,7 @@ export const inspectReturn = asyncHandler(async (req, res) => {
 
   const { inspectionResult, inspectionNote } = req.body;
 
-  const returnRequest = await inspectReturnRequest({
+  const returnRequest = await returnService.inspectReturnRequest({
     returnId,
     inspectionResult,
     inspectionNote,
@@ -143,5 +143,20 @@ export const inspectReturn = asyncHandler(async (req, res) => {
     success: true,
     message: "Return inspection completed",
     data: returnRequest,
+  });
+});
+
+export const processRefund = asyncHandler(async (req, res) => {
+  const { returnId } = req.params;
+
+  const result = await returnService.processReturnRefund({
+    returnId,
+    adminId: req.user._id,
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "Refund processing started.",
+    data: result.returnRequest,
   });
 });

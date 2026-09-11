@@ -1,5 +1,27 @@
 import ApiError from "../utils/ApiError.js";
 
+/*
+ * --------------------------------
+ * Calculate GST included in price
+ * --------------------------------
+ *
+ * Product price is GST-inclusive.
+ *
+ * Example:
+ * ₹118 @ 18% GST
+ *
+ * Taxable value = 118 / 1.18
+ * GST           = 118 - taxable value
+ */
+
+const calculateIncludedTax = (amount, taxRate) => {
+  if (!amount || !taxRate) {
+    return 0;
+  }
+
+  return amount - amount / (1 + taxRate / 100);
+};
+
 const buildCartSummary = ({ cart, products }) => {
   if (!cart || cart.items.length === 0) {
     throw new ApiError(400, "Your cart is empty");
@@ -10,6 +32,8 @@ const buildCartSummary = ({ cart, products }) => {
   const items = [];
 
   let itemsTotal = 0;
+  let discount = 0;
+  let tax = 0;
 
   for (const cartItem of cart.items) {
     const product = productMap.get(cartItem.product.toString());
@@ -30,9 +54,63 @@ const buildCartSummary = ({ cart, products }) => {
       throw new ApiError(400, `Only ${product.stock} units of ${product.name} are available`);
     }
 
-    const subtotal = product.price * cartItem.quantity;
+    const quantity = cartItem.quantity;
+
+    /*
+     * --------------------------------
+     * Selling price
+     * --------------------------------
+     */
+
+    const subtotal = product.price * quantity;
+
+    /*
+     * --------------------------------
+     * Discount
+     * --------------------------------
+     *
+     * comparePrice is treated as MRP /
+     * original price.
+     *
+     * Discount is informational because
+     * product.price is already the discounted
+     * selling price.
+     */
+
+    const originalSubtotal =
+      Math.max(Number(product.comparePrice || 0), Number(product.price || 0)) * quantity;
+
+    const itemDiscount = Math.max(0, originalSubtotal - subtotal);
+
+    /*
+     * --------------------------------
+     * GST
+     * --------------------------------
+     *
+     * GST is already included in product.price.
+     */
+
+    const taxRate = Number(product.tax?.rate || 0);
+
+    const itemTax = calculateIncludedTax(subtotal, taxRate);
+
+    /*
+     * --------------------------------
+     * Accumulate totals
+     * --------------------------------
+     */
 
     itemsTotal += subtotal;
+
+    discount += itemDiscount;
+
+    tax += itemTax;
+
+    /*
+     * --------------------------------
+     * Order item snapshot
+     * --------------------------------
+     */
 
     items.push({
       product: product._id,
@@ -47,30 +125,51 @@ const buildCartSummary = ({ cart, products }) => {
 
       price: product.price,
 
-      quantity: cartItem.quantity,
+      comparePrice: product.comparePrice || 0,
+
+      quantity,
 
       subtotal,
+
+      discount: itemDiscount,
+
+      tax: itemTax,
+
+      taxRate,
     });
   }
 
-  // Temporary pricing rules.
-  // We'll replace these when shipping,
-  // coupons and tax calculations are built.
-  const shippingFee = 0;
-  const discount = 0;
-  const tax = 0;
+  /*
+   * Shipping is calculated separately.
+   */
 
-  const grandTotal = itemsTotal + shippingFee + tax - discount;
+  const shippingFee = 0;
+
+  /*
+   * IMPORTANT:
+   *
+   * price already contains the discount
+   * and GST.
+   *
+   * Therefore neither tax nor discount
+   * is added/subtracted again.
+   */
+
+  const grandTotal = itemsTotal + shippingFee;
 
   return {
     items,
 
     pricing: {
-      itemsTotal,
+      itemsTotal: Number(itemsTotal.toFixed(2)),
+
       shippingFee,
-      discount,
-      tax,
-      grandTotal,
+
+      discount: Number(discount.toFixed(2)),
+
+      tax: Number(tax.toFixed(2)),
+
+      grandTotal: Number(grandTotal.toFixed(2)),
     },
   };
 };

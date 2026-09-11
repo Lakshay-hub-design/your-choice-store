@@ -11,6 +11,7 @@ import {
   rejectReturnRequest,
   markReturnAsReceived,
   inspectReturn,
+  processRefund,
 } from "../../controllers/return.controller.js";
 
 import { approveReturnSchema, rejectReturnSchema } from "../../validators/adminReturn.validator.js";
@@ -39,5 +40,7 @@ router.patch("/:returnId/reject", validate(rejectReturnSchema), rejectReturnRequ
 router.patch("/:returnId/received", markReturnAsReceived);
 
 router.patch("/:returnId/inspect", authenticate, authorize("admin"), inspectReturn);
+
+router.patch("/:returnId/refund", authenticate, authorize("admin"), processRefund);
 
 export default router;

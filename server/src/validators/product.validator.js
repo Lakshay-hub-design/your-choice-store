@@ -35,9 +35,32 @@ export const createProductSchema = z.object({
 
     comparePrice: z.coerce.number().min(0).optional(),
 
+    tax: z.preprocess(
+      parseJSON,
+      z.object({
+        rate: z.coerce
+          .number()
+          .refine((value) => [0, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
+      })
+    ),
+
     stock: z.coerce.number().int().min(0),
 
     lowStockThreshold: z.coerce.number().int().min(0).optional(),
+    shipping: z.preprocess(
+      parseJSON,
+      z.object({
+        weight: z.coerce.number().positive("Shipping weight must be greater than 0"),
+
+        dimensions: z.object({
+          length: z.coerce.number().positive("Length must be greater than 0"),
+
+          breadth: z.coerce.number().positive("Breadth must be greater than 0"),
+
+          height: z.coerce.number().positive("Height must be greater than 0"),
+        }),
+      })
+    ),
 
     isFeatured: booleanFromFormData.optional(),
 
@@ -93,6 +116,17 @@ export const updateProductSchema = z.object({
 
       comparePrice: z.coerce.number().min(0, "Compare price cannot be negative").optional(),
 
+      tax: z.preprocess(
+        parseJSON,
+        z
+          .object({
+            rate: z.coerce
+              .number()
+              .refine((value) => [0, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
+          })
+          .optional()
+      ),
+
       stock: z.coerce.number().int().min(0, "Stock cannot be negative").optional(),
 
       lowStockThreshold: z.coerce
@@ -122,6 +156,23 @@ export const updateProductSchema = z.object({
             maxImages: z.coerce.number().int().min(1).optional(),
 
             instructions: z.string().trim().optional(),
+          })
+          .optional()
+      ),
+
+      shipping: z.preprocess(
+        parseJSON,
+        z
+          .object({
+            weight: z.coerce.number().positive("Shipping weight must be greater than 0"),
+
+            dimensions: z.object({
+              length: z.coerce.number().positive("Length must be greater than 0"),
+
+              breadth: z.coerce.number().positive("Breadth must be greater than 0"),
+
+              height: z.coerce.number().positive("Height must be greater than 0"),
+            }),
           })
           .optional()
       ),

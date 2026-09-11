@@ -58,6 +58,14 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
+    tax: {
+      rate: {
+        type: Number,
+        required: true,
+        enum: [0, 3, 5, 12, 18, 28],
+      },
+    },
+
     stock: {
       type: Number,
       required: true,
@@ -123,6 +131,34 @@ const productSchema = new mongoose.Schema(
       instructions: {
         type: String,
         default: "",
+      },
+    },
+
+    shipping: {
+      weight: {
+        type: Number,
+        required: true,
+        min: 0.001,
+      },
+
+      dimensions: {
+        length: {
+          type: Number,
+          required: true,
+          min: 0.1,
+        },
+
+        breadth: {
+          type: Number,
+          required: true,
+          min: 0.1,
+        },
+
+        height: {
+          type: Number,
+          required: true,
+          min: 0.1,
+        },
       },
     },
 

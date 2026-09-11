@@ -5,7 +5,9 @@ export const ORDER_STATUS = {
   CONFIRMED: "CONFIRMED",
   PROCESSING: "PROCESSING",
   SHIPPED: "SHIPPED",
+  OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
   DELIVERED: "DELIVERED",
+  RTO: "RTO",
   CANCELLED: "CANCELLED",
 };
 
@@ -253,6 +255,60 @@ const orderSchema = new mongoose.Schema(
       expiresAt: {
         type: Date,
         default: null,
+      },
+    },
+
+    shipment: {
+      provider: {
+        type: String,
+        default: "SHIPROCKET",
+      },
+
+      shiprocketOrderId: {
+        type: String,
+        default: "",
+        index: true,
+      },
+
+      shipmentId: {
+        type: String,
+        default: "",
+      },
+
+      awbCode: {
+        type: String,
+        default: "",
+        index: true,
+      },
+
+      courierName: {
+        type: String,
+        default: "",
+      },
+
+      trackingUrl: {
+        type: String,
+        default: "",
+      },
+
+      labelUrl: {
+        type: String,
+        default: "",
+      },
+
+      currentStatus: {
+        type: String,
+        default: "",
+      },
+
+      pickupScheduledAt: {
+        type: Date,
+        default: null,
+      },
+
+      failureReason: {
+        type: String,
+        default: "",
       },
     },
 
