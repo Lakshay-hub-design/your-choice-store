@@ -10,6 +10,25 @@ export const INITIAL_PRODUCT_FORM = {
   stock: "",
   lowStockThreshold: "5",
 
+  tax: {
+    rate: "5",
+  },
+
+  /*
+   * Shipping Information
+   *
+   * Weight: kg
+   * Dimensions: cm
+   */
+  shipping: {
+    weight: "",
+    dimensions: {
+      length: "",
+      breadth: "",
+      height: "",
+    },
+  },
+
   tags: "",
 
   customization: {
@@ -45,6 +64,40 @@ export const productToForm = (product) => {
 
     lowStockThreshold:
       product?.lowStockThreshold !== undefined ? String(product.lowStockThreshold) : "5",
+
+    tax: {
+      rate: product?.tax?.rate !== undefined ? String(product.tax.rate) : "5",
+    },
+
+    /*
+     * Shipping Information
+     *
+     * Convert numbers to strings because
+     * form inputs use string values.
+     *
+     * Defaults also support older products
+     * that don't have shipping information.
+     */
+    shipping: {
+      weight: product?.shipping?.weight !== undefined ? String(product.shipping.weight) : "",
+
+      dimensions: {
+        length:
+          product?.shipping?.dimensions?.length !== undefined
+            ? String(product.shipping.dimensions.length)
+            : "",
+
+        breadth:
+          product?.shipping?.dimensions?.breadth !== undefined
+            ? String(product.shipping.dimensions.breadth)
+            : "",
+
+        height:
+          product?.shipping?.dimensions?.height !== undefined
+            ? String(product.shipping.dimensions.height)
+            : "",
+      },
+    },
 
     tags: product?.tags?.join(", ") || "",
 

@@ -41,6 +41,34 @@ export const buildProductFormData = ({ form, images = [], removedImages = [] }) 
     })
   );
 
+  /*
+   * --------------------------------
+   * Shipping Information
+   * --------------------------------
+   *
+   * Shipping is sent as JSON because
+   * the request uses multipart/form-data.
+   */
+  data.append(
+    "shipping",
+    JSON.stringify({
+      weight: Number(form.shipping?.weight) || 0,
+
+      dimensions: {
+        length: Number(form.shipping?.dimensions?.length) || 0,
+        breadth: Number(form.shipping?.dimensions?.breadth) || 0,
+        height: Number(form.shipping?.dimensions?.height) || 0,
+      },
+    })
+  );
+
+  data.append(
+    "tax",
+    JSON.stringify({
+      rate: form.tax?.rate,
+    })
+  );
+
   data.append("isFeatured", String(form.isFeatured));
 
   data.append("isBestSeller", String(form.isBestSeller));
