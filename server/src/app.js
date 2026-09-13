@@ -70,6 +70,7 @@ import adminCategoryRoutes from "./routes/admin/adminCategoryRoutes.js";
 import reviewRoutes from "./routes/review.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import adminReturnRoutes from "./routes/admin/return.routes.js";
+import shippingRoutes from "./features/shipping/shipping.routes.js";
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
@@ -82,6 +83,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/shipping", shippingRoutes);
 
 app.use("/api/admin/categories", adminCategoryRoutes);
 app.use("/api/admin/products", adminProductRoutes);

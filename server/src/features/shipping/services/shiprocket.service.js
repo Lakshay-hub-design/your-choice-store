@@ -144,11 +144,194 @@ const getCourierServiceability = async ({
   }
 };
 
+const createOrder = async ({
+  orderId,
+  orderDate,
+  pickupLocation,
+
+  billingCustomerName,
+  billingAddress,
+  billingCity,
+  billingState,
+  billingPincode,
+  billingPhone,
+  billingEmail,
+
+  orderItems,
+
+  paymentMethod,
+
+  subTotal,
+  shippingCharges = 0,
+  totalDiscount = 0,
+
+  length,
+  breadth,
+  height,
+  weight,
+}) => {
+  if (!orderId) {
+    throw new ApiError(400, "Shiprocket order ID is required.");
+  }
+
+  if (!pickupLocation) {
+    throw new ApiError(500, "Shiprocket pickup location is not configured.");
+  }
+
+  if (!billingCustomerName) {
+    throw new ApiError(400, "Customer name is required.");
+  }
+
+  if (!billingAddress) {
+    throw new ApiError(400, "Customer address is required.");
+  }
+
+  if (!billingCity || !billingState || !billingPincode) {
+    throw new ApiError(400, "Complete customer address is required.");
+  }
+
+  if (!billingPhone) {
+    throw new ApiError(400, "Customer phone is required.");
+  }
+
+  if (!Array.isArray(orderItems) || orderItems.length === 0) {
+    throw new ApiError(400, "At least one order item is required.");
+  }
+
+  if (!weight || weight <= 0) {
+    throw new ApiError(400, "Valid shipment weight is required.");
+  }
+
+  const token = await getToken();
+
+  const payload = {
+    order_id: orderId,
+
+    order_date: orderDate || new Date().toISOString(),
+
+    pickup_location: pickupLocation,
+
+    billing_customer_name: billingCustomerName,
+
+    billing_last_name: "",
+
+    billing_address: billingAddress,
+
+    billing_city: billingCity,
+
+    billing_pincode: billingPincode,
+
+    billing_state: billingState,
+
+    billing_country: "India",
+
+    billing_email: billingEmail || "",
+
+    billing_phone: billingPhone,
+
+    shipping_is_billing: true,
+
+    order_items: orderItems,
+
+    payment_method: paymentMethod === "COD" ? "COD" : "Prepaid",
+
+    sub_total: subTotal,
+
+    shipping_charges: shippingCharges,
+
+    total_discount: totalDiscount,
+
+    length,
+
+    breadth,
+
+    height,
+
+    weight,
+  };
+
+  try {
+    const response = await axios.post(`${SHIPROCKET_BASE_URL}/orders/create/adhoc`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+
+      timeout: 15000,
+    });
+
+    console.log("SHIPROCKET RAW CREATE ORDER RESPONSE:", JSON.stringify(response.data, null, 2));
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      invalidateToken();
+
+      throw new ApiError(502, "Shiprocket authentication expired. Please try again.");
+    }
+
+    console.error("Shiprocket order creation failed:", error.response?.data || error.message);
+
+    throw new ApiError(
+      502,
+      error.response?.data?.message || "Unable to create order in Shiprocket."
+    );
+  }
+};
+
+const generateAWB = async ({ shipmentId, courierId }) => {
+  if (!shipmentId) {
+    throw new ApiError(400, "Shiprocket shipment ID is required.");
+  }
+
+  if (!courierId) {
+    throw new ApiError(400, "Courier ID is required.");
+  }
+
+  const token = await getToken();
+
+  try {
+    const response = await axios.post(
+      `${SHIPROCKET_BASE_URL}/courier/assign/awb`,
+      {
+        shipment_id: shipmentId,
+        courier_id: courierId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 15000,
+      }
+    );
+
+    console.log("SHIPROCKET AWB RESPONSE:", JSON.stringify(response.data, null, 2));
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      invalidateToken();
+
+      throw new ApiError(502, "Shiprocket authentication expired. Please try again.");
+    }
+
+    console.error("Shiprocket AWB assignment failed:", error.response?.data || error.message);
+
+    throw new ApiError(
+      502,
+      error.response?.data?.message || "Unable to assign courier/AWB through Shiprocket."
+    );
+  }
+};
+
 const shiprocketService = {
   authenticate,
   getToken,
   invalidateToken,
+  generateAWB,
   getCourierServiceability,
+  createOrder,
 };
 
 export default shiprocketService;

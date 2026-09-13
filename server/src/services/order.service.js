@@ -1,10 +1,11 @@
 import mongoose from "mongoose";
 
-import Order, { ORDER_STATUS } from "../models/Order.js";
+import Order, { ORDER_STATUS, SHIPMENT_STATUS } from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import Address from "../models/Address.js";
 import Review from "../models/Review.js";
+import User from "../models/User.js";
 
 import ApiError from "../utils/ApiError.js";
 
@@ -154,6 +155,10 @@ const verifyOnlinePayment = async ({
    */
 
   if (order.paymentStatus === "PAID") {
+    await processPaidOrder({
+      orderId: order._id,
+    });
+
     return {
       success: true,
 
@@ -214,6 +219,8 @@ const verifyOnlinePayment = async ({
 
     razorpaySignature,
   });
+
+  await createShiprocketShipmentForOrder(result.order._id);
 
   /*
    * ==========================================
@@ -469,6 +476,253 @@ const finalizeOnlinePayment = async ({
   }
 };
 
+const createShiprocketShipmentForOrder = async (orderId) => {
+  try {
+    const order = await Order.findById(orderId);
+
+    if (!order) {
+      throw new ApiError(404, "Order not found.");
+    }
+
+    // Already created — don't create another Shiprocket order.
+    if (order.shipment?.shiprocketOrderId) {
+      return order;
+    }
+
+    if (order.paymentStatus !== "PAID") {
+      throw new ApiError(400, "Shiprocket shipment can only be created for a paid order.");
+    }
+
+    const user = await User.findById(order.user).select("fullName email phone");
+
+    if (!user) {
+      throw new ApiError(404, "Customer not found while creating shipment.");
+    }
+
+    const shipmentResult = await shippingService.createShipmentForOrder({
+      order,
+      user,
+    });
+
+    const shiprocketOrderId = shipmentResult.response?.order_id;
+
+    const shipmentId = shipmentResult.response?.shipment_id;
+
+    if (!shiprocketOrderId || !shipmentId) {
+      throw new Error(
+        `Shiprocket response did not contain expected IDs: ${JSON.stringify(
+          shipmentResult.response
+        )}`
+      );
+    }
+
+    order.shipment.shiprocketOrderId = String(shiprocketOrderId);
+
+    order.shipment.shipmentId = String(shipmentId);
+
+    order.shipment.currentStatus = "CREATED";
+
+    order.shipment.failureReason = "";
+
+    await order.save();
+
+    return order;
+  } catch (error) {
+    console.error("Shiprocket shipment creation failed:", orderId, error);
+
+    // Important:
+    // Payment remains successful.
+    // Only shipment creation failed.
+    await Order.findByIdAndUpdate(orderId, {
+      $set: {
+        "shipment.currentStatus": "FAILED",
+        "shipment.failureReason": error.message || "Unable to create Shiprocket order.",
+      },
+    }).catch((saveError) => {
+      console.error("Failed to save Shiprocket failure status:", saveError);
+    });
+
+    return null;
+  }
+};
+
+const processPaidOrder = async ({ orderId }) => {
+  /*
+   * ==========================================
+   * 1. Atomically claim shipment creation
+   * ==========================================
+   *
+   * Only one request should be allowed to
+   * create the Shiprocket order.
+   *
+   * This protects us when both:
+   * - frontend payment verification
+   * - Razorpay webhook
+   *
+   * reach this function at nearly the same time.
+   */
+
+  const order = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+
+      paymentStatus: "PAID",
+
+      /*
+       * Shiprocket order has not already been created.
+       */
+      "shipment.shiprocketOrderId": {
+        $in: ["", null],
+      },
+
+      /*
+       * Another request isn't currently creating it.
+       */
+      "shipment.currentStatus": {
+        $ne: SHIPMENT_STATUS.CREATING,
+      },
+    },
+    {
+      $set: {
+        "shipment.currentStatus": SHIPMENT_STATUS.CREATING,
+
+        "shipment.failureReason": "",
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  /*
+   * ==========================================
+   * 2. Could not claim it
+   * ==========================================
+   */
+
+  if (!order) {
+    const existingOrder = await Order.findById(orderId);
+
+    if (!existingOrder) {
+      throw new ApiError(404, "Order not found.");
+    }
+
+    return {
+      processed: false,
+
+      alreadyProcessingOrCreated: true,
+
+      order: existingOrder,
+    };
+  }
+
+  /*
+   * ==========================================
+   * 3. Get customer
+   * ==========================================
+   */
+
+  try {
+    const user = await User.findById(order.user).select("fullName email phone");
+
+    if (!user) {
+      throw new ApiError(404, "Customer not found while creating shipment.");
+    }
+
+    /*
+     * ==========================================
+     * 4. Create Shiprocket order
+     * ==========================================
+     */
+
+    const shipmentResult = await shippingService.createShipmentForOrder({
+      order,
+      user,
+    });
+
+    /*
+     * ==========================================
+     * 5. Extract Shiprocket IDs
+     * ==========================================
+     */
+
+    const shiprocketOrderId = shipmentResult.response?.order_id;
+
+    const shipmentId = shipmentResult.response?.shipment_id;
+
+    if (!shiprocketOrderId || !shipmentId) {
+      throw new Error(
+        `Shiprocket response did not contain expected IDs: ${JSON.stringify(
+          shipmentResult.response
+        )}`
+      );
+    }
+
+    /*
+     * ==========================================
+     * 6. Save shipment information
+     * ==========================================
+     */
+
+    order.shipment.shiprocketOrderId = String(shiprocketOrderId);
+
+    order.shipment.shipmentId = String(shipmentId);
+
+    order.shipment.currentStatus = SHIPMENT_STATUS.CREATED;
+
+    order.shipment.failureReason = "";
+
+    await order.save();
+
+    console.log(`Shiprocket order created for ${order.orderNumber}:`, {
+      shiprocketOrderId,
+      shipmentId,
+    });
+
+    return {
+      processed: true,
+
+      success: true,
+
+      order,
+    };
+  } catch (error) {
+    /*
+     * ==========================================
+     * 7. Shiprocket creation failed
+     * ==========================================
+     */
+
+    console.error(`Shiprocket order creation failed for ${order.orderNumber}:`, error);
+
+    order.shipment.currentStatus = SHIPMENT_STATUS.FAILED;
+
+    order.shipment.failureReason = error.message || "Unable to create Shiprocket order.";
+
+    await order.save().catch((saveError) => {
+      console.error("Failed to save Shiprocket failure status:", saveError);
+    });
+
+    /*
+     * IMPORTANT:
+     *
+     * Payment is already PAID.
+     * We do NOT throw the Shiprocket failure
+     * as a payment failure.
+     */
+
+    return {
+      processed: false,
+
+      success: false,
+
+      shipmentFailed: true,
+
+      order,
+    };
+  }
+};
+
 /**
  * Place a Cash on Delivery order.
  */
@@ -580,6 +834,7 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
       products,
       cart,
       deliveryPostcode: address.postalCode,
+      paymentMethod: "COD",
     });
 
     const finalPricing = {
@@ -679,6 +934,56 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
      * 9. Commit transaction.
      */
     await session.commitTransaction();
+
+    try {
+      const user = await User.findById(userId).select("fullName email phone");
+
+      if (!user) {
+        throw new ApiError(404, "Customer not found while creating shipment.");
+      }
+
+      const shipmentResult = await shippingService.createShipmentForOrder({
+        order,
+        user,
+      });
+
+      console.log(
+        "SHIPROCKET CREATE ORDER RESPONSE:",
+        JSON.stringify(shipmentResult.response, null, 2)
+      );
+
+      const shiprocketOrderId = shipmentResult.response?.order_id;
+
+      const shipmentId = shipmentResult.response?.shipment_id;
+
+      if (!shiprocketOrderId || !shipmentId) {
+        throw new Error(
+          `Shiprocket response did not contain expected IDs: ${JSON.stringify(
+            shipmentResult.response
+          )}`
+        );
+      }
+
+      order.shipment.shiprocketOrderId = String(shiprocketOrderId);
+
+      order.shipment.shipmentId = String(shipmentId);
+
+      order.shipment.currentStatus = "CREATED";
+
+      order.shipment.failureReason = "";
+
+      await order.save();
+    } catch (error) {
+      console.error("Shiprocket order creation failed for order:", order.orderNumber, error);
+
+      order.shipment.currentStatus = "FAILED";
+
+      order.shipment.failureReason = error.message || "Unable to create Shiprocket order.";
+
+      await order.save().catch((saveError) => {
+        console.error("Failed to save Shiprocket failure status:", saveError);
+      });
+    }
 
     sendSellerNewOrderEmail(order).catch((error) => {
       console.error("Seller order email failed:", error);
@@ -854,6 +1159,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
     products,
     cart,
     deliveryPostcode: address.postalCode,
+    paymentMethod: "ONLINE",
   });
 
   const finalPricing = {
@@ -1837,6 +2143,7 @@ const orderService = {
   placeOnlineOrder,
   verifyOnlinePayment,
   finalizeOnlinePayment,
+  processPaidOrder,
   getOrderById,
   getUserOrders,
   cancelOrder,

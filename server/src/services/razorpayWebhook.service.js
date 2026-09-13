@@ -63,6 +63,12 @@ const processRazorpayWebhook = async ({ event }) => {
     razorpayPayment: payment,
   });
 
+  if (result.order) {
+    await orderService.processPaidOrder({
+      orderId: result.order._id,
+    });
+  }
+
   return result;
 };
 
