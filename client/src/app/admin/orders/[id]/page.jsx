@@ -11,6 +11,7 @@ import { getAdminOrderById } from "@/features/admin/orders/services/adminOrderSe
 
 import AdminOrderStatus from "@/features/admin/orders/components/AdminOrderStatus";
 import AdminOrderTimeline from "@/features/admin/orders/components/AdminOrderTimeline";
+import ShipmentCard from "@/features/admin/orders/components/ShipmentCard";
 
 export default function AdminOrderDetailsPage({ params }) {
   const { id } = use(params);
@@ -99,6 +100,8 @@ export default function AdminOrderDetailsPage({ params }) {
           <ShippingCard address={order.shippingAddress} />
 
           <PaymentCard order={order} />
+
+          <ShipmentCard order={order} onUpdated={setOrder} />
 
           {order.orderStatus === "CANCELLED" && <CancellationCard order={order} />}
         </div>
