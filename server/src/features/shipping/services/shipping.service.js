@@ -553,12 +553,230 @@ const assignCourierToOrder = async ({ orderId, courierId }) => {
   };
 };
 
+const schedulePickupForOrder = async ({ orderId, pickupDate, retry = false }) => {
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    throw new ApiError(404, "Order not found.");
+  }
+
+  if (!order.shipment?.shiprocketOrderId) {
+    throw new ApiError(400, "Shiprocket order has not been created yet.");
+  }
+
+  if (!order.shipment?.shipmentId) {
+    throw new ApiError(400, "Shiprocket shipment ID is missing.");
+  }
+
+  if (!order.shipment?.awbCode) {
+    throw new ApiError(400, "AWB must be assigned before scheduling pickup.");
+  }
+
+  if (order.shipment.currentStatus === SHIPMENT_STATUS.PICKUP_SCHEDULED) {
+    throw new ApiError(400, "Pickup has already been scheduled for this shipment.");
+  }
+
+  if (pickupDate && !/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
+    throw new ApiError(400, "Pickup date must be in YYYY-MM-DD format.");
+  }
+
+  const response = await shiprocketService.generatePickup({
+    shipmentId: order.shipment.shipmentId,
+    pickupDate,
+    retry,
+  });
+
+  const pickupScheduledDate =
+    response?.pickup_scheduled_date || response?.response?.pickup_scheduled_date || null;
+
+  const pickupTokenNumber =
+    response?.pickup_token_number || response?.response?.pickup_token_number || null;
+
+  const pickupGenerated = response?.pickup_generated ?? response?.response?.pickup_generated;
+
+  if (pickupGenerated !== undefined && Number(pickupGenerated) !== 1) {
+    throw new ApiError(502, response?.message || "Shiprocket did not generate the pickup request.");
+  }
+
+  order.shipment.currentStatus = SHIPMENT_STATUS.PICKUP_SCHEDULED;
+
+  order.shipment.failureReason = "";
+
+  if (pickupScheduledDate) {
+    const parsedDate = new Date(pickupScheduledDate);
+
+    if (!Number.isNaN(parsedDate.getTime())) {
+      order.shipment.pickupScheduledAt = parsedDate;
+    }
+  }
+
+  if (pickupTokenNumber) {
+    order.shipment.pickupTokenNumber = String(pickupTokenNumber);
+  }
+
+  await order.save();
+
+  return {
+    success: true,
+    pickupScheduledDate,
+    pickupTokenNumber,
+    order,
+    response,
+  };
+};
+
+const trackOrderShipment = async ({ orderId }) => {
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    throw new ApiError(404, "Order not found.");
+  }
+
+  const awbCode = order.shipment?.awbCode;
+
+  if (!awbCode) {
+    throw new ApiError(400, "AWB has not been assigned to this shipment.");
+  }
+
+  const response = await shiprocketService.trackShipmentByAwb({
+    awbCode,
+  });
+
+  const tracking = extractTrackingData(response);
+
+  if (!tracking.status) {
+    throw new ApiError(502, "Shiprocket did not return a shipment status.");
+  }
+
+  order.shipment.currentStatus = mapShiprocketStatus(tracking.status);
+
+  order.shipment.lastTrackedAt = new Date();
+
+  if (tracking.trackingUrl) {
+    order.shipment.trackingUrl = tracking.trackingUrl;
+  }
+
+  if (tracking.estimatedDeliveryAt) {
+    order.shipment.estimatedDeliveryAt = tracking.estimatedDeliveryAt;
+  }
+
+  if (tracking.event) {
+    addTrackingEvent(order, tracking.event);
+  }
+
+  await order.save();
+
+  return {
+    success: true,
+    order,
+    tracking,
+    response,
+  };
+};
+
+const mapShiprocketStatus = (status = "") => {
+  const normalized = status.toLowerCase().replace(/[_-]/g, " ").trim();
+
+  if (
+    normalized.includes("pickup scheduled") ||
+    normalized.includes("pickup queued") ||
+    normalized.includes("pickup generated")
+  ) {
+    return SHIPMENT_STATUS.PICKUP_SCHEDULED;
+  }
+
+  if (normalized.includes("picked up") || normalized.includes("pickup done")) {
+    return SHIPMENT_STATUS.PICKED_UP;
+  }
+
+  if (normalized === "shipped") {
+    return SHIPMENT_STATUS.SHIPPED;
+  }
+
+  if (normalized.includes("in transit") || normalized.includes("in-transit")) {
+    return SHIPMENT_STATUS.IN_TRANSIT;
+  }
+
+  if (normalized.includes("out for delivery") || normalized.includes("out-for-delivery")) {
+    return SHIPMENT_STATUS.OUT_FOR_DELIVERY;
+  }
+
+  if (normalized.includes("delivered")) {
+    return SHIPMENT_STATUS.DELIVERED;
+  }
+
+  if (normalized.includes("rto") || normalized.includes("return to origin")) {
+    return SHIPMENT_STATUS.RTO;
+  }
+
+  return SHIPMENT_STATUS.CREATED;
+};
+
+const extractTrackingData = (response) => {
+  const trackingData =
+    response?.tracking_data || response?.response?.tracking_data || response?.response || response;
+
+  const shipmentTrack = trackingData?.shipment_track?.[0] || null;
+
+  const activities = trackingData?.shipment_track_activities || [];
+
+  const status =
+    shipmentTrack?.current_status || shipmentTrack?.status || trackingData?.current_status || "";
+
+  const trackingUrl = shipmentTrack?.tracking_url || trackingData?.track_url || "";
+
+  const estimatedDelivery = shipmentTrack?.edd || shipmentTrack?.estimated_delivery_date || null;
+
+  const latestActivity = activities.length > 0 ? activities[activities.length - 1] : null;
+
+  return {
+    status,
+    trackingUrl,
+    estimatedDeliveryAt: parseDate(estimatedDelivery),
+    event: latestActivity
+      ? {
+          status: latestActivity.activity || latestActivity.status || "",
+          description: latestActivity.activity || latestActivity.status || "",
+          location: latestActivity.location || "",
+          timestamp: parseDate(latestActivity.date || latestActivity.timestamp),
+        }
+      : null,
+  };
+};
+
+const parseDate = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const addTrackingEvent = (order, event) => {
+  if (!event) return;
+
+  const exists = order.shipment.trackingEvents?.some(
+    (existing) =>
+      existing.status === event.status &&
+      existing.location === event.location &&
+      existing.timestamp?.getTime?.() === event.timestamp?.getTime?.()
+  );
+
+  if (exists) {
+    return;
+  }
+
+  order.shipment.trackingEvents.push(event);
+};
+
 const shippingService = {
   getShippingQuote,
   createShipmentForOrder,
 
   getAvailableCouriersForOrder,
   assignCourierToOrder,
+  schedulePickupForOrder,
+  trackOrderShipment,
 };
 
 export default shippingService;

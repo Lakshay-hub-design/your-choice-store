@@ -304,6 +304,43 @@ const orderSchema = new mongoose.Schema(
         default: "",
       },
 
+      lastTrackedAt: {
+        type: Date,
+        default: null,
+      },
+
+      estimatedDeliveryAt: {
+        type: Date,
+        default: null,
+      },
+
+      trackingEvents: {
+        type: [
+          {
+            status: {
+              type: String,
+              default: "",
+            },
+
+            description: {
+              type: String,
+              default: "",
+            },
+
+            location: {
+              type: String,
+              default: "",
+            },
+
+            timestamp: {
+              type: Date,
+              default: null,
+            },
+          },
+        ],
+        default: [],
+      },
+
       labelUrl: {
         type: String,
         default: "",
@@ -317,6 +354,11 @@ const orderSchema = new mongoose.Schema(
       pickupScheduledAt: {
         type: Date,
         default: null,
+      },
+
+      pickupTokenNumber: {
+        type: String,
+        default: "",
       },
 
       failureReason: {
@@ -376,6 +418,10 @@ orderSchema.index(
     },
   }
 );
+
+OrderSchema.index({
+  "shipment.awbCode": 1,
+});
 
 const Order = mongoose.model("Order", orderSchema);
 

@@ -325,6 +325,91 @@ const generateAWB = async ({ shipmentId, courierId }) => {
   }
 };
 
+const generatePickup = async ({ shipmentId, pickupDate, retry = false }) => {
+  if (!shipmentId) {
+    throw new ApiError(400, "Shiprocket shipment ID is required.");
+  }
+
+  const token = await getToken();
+
+  const payload = {
+    shipment_id: [Number(shipmentId)],
+  };
+
+  if (pickupDate) {
+    payload.pickup_date = [pickupDate];
+  }
+
+  if (retry) {
+    payload.status = "retry";
+  }
+
+  try {
+    const response = await axios.post(`${SHIPROCKET_BASE_URL}/courier/generate/pickup`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 15000,
+    });
+
+    console.log("SHIPROCKET PICKUP RESPONSE:", JSON.stringify(response.data, null, 2));
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      invalidateToken();
+
+      throw new ApiError(502, "Shiprocket authentication expired. Please try again.");
+    }
+
+    console.error("Shiprocket pickup generation failed:", error.response?.data || error.message);
+
+    throw new ApiError(
+      502,
+      error.response?.data?.message || "Unable to schedule pickup through Shiprocket."
+    );
+  }
+};
+
+const trackShipmentByAwb = async ({ awbCode }) => {
+  if (!awbCode) {
+    throw new ApiError(400, "AWB number is required.");
+  }
+
+  const token = await getToken();
+
+  try {
+    const response = await axios.get(
+      `${SHIPROCKET_BASE_URL}/courier/track/awb/${encodeURIComponent(awbCode)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 15000,
+      }
+    );
+
+    console.log("SHIPROCKET TRACKING RESPONSE:", JSON.stringify(response.data, null, 2));
+
+    return response.data;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      invalidateToken();
+
+      throw new ApiError(502, "Shiprocket authentication expired. Please try again.");
+    }
+
+    console.error("Shiprocket tracking failed:", error.response?.data || error.message);
+
+    throw new ApiError(
+      502,
+      error.response?.data?.message || "Unable to fetch shipment tracking from Shiprocket."
+    );
+  }
+};
+
 const shiprocketService = {
   authenticate,
   getToken,
@@ -332,6 +417,8 @@ const shiprocketService = {
   generateAWB,
   getCourierServiceability,
   createOrder,
+  generatePickup,
+  trackShipmentByAwb,
 };
 
 export default shiprocketService;

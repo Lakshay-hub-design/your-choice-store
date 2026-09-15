@@ -12,7 +12,13 @@ import {
   cancelAdminOrder,
 } from "../../controllers/order.controller.js";
 
-import { getAvailableCouriers, assignCourier } from "../../controllers/shipment.controller.js";
+import {
+  getAvailableCouriers,
+  assignCourier,
+  schedulePickup,
+  trackShipment,
+  shiprocketTrackingWebhook,
+} from "../../controllers/shipment.controller.js";
 
 const router = express.Router();
 
@@ -39,5 +45,11 @@ router.post(
   authorize(USER_ROLES.ADMIN),
   assignCourier
 );
+
+router.patch("/:orderId/pickup", schedulePickup);
+
+router.get("/:orderId/tracking", trackShipment);
+
+router.post("/webhooks/shiprocket/tracking", shiprocketTrackingWebhook);
 
 export default router;
