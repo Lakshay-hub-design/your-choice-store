@@ -1,13 +1,17 @@
 "use client";
 
-import { CheckCircle2, Copy, Package, Truck } from "lucide-react";
+import { CheckCircle2, Copy, Package, Truck, RefreshCw, ExternalLink } from "lucide-react";
 
 import { useState } from "react";
 
 import CourierSelectionModal from "./CourierSelectionModal";
+import SchedulePickupModal from "./SchedulePickupModal";
+
 import {
   getAvailableCouriers,
   assignCourier,
+  schedulePickup,
+  trackShipment,
 } from "@/features/admin/orders/services/adminOrderService";
 
 export default function ShipmentCard({ order, onUpload }) {
@@ -27,6 +31,16 @@ export default function ShipmentCard({ order, onUpload }) {
   const [selectedCourierId, setSelectedCourierId] = useState(null);
 
   const [isAssigning, setIsAssigning] = useState(false);
+
+  const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
+
+  const [isSchedulingPickup, setIsSchedulingPickup] = useState(false);
+
+  const [pickupError, setPickupError] = useState("");
+
+  const [isTracking, setIsTracking] = useState(false);
+
+  const [trackingError, setTrackingError] = useState("");
 
   const shipment = order?.shipment;
 
@@ -123,6 +137,42 @@ export default function ShipmentCard({ order, onUpload }) {
     }
   };
 
+  const handleSchedulePickup = async (pickupDate) => {
+    setIsSchedulingPickup(true);
+    setPickupError("");
+
+    try {
+      const data = await schedulePickup(order._id, pickupDate);
+
+      if (data?.order) {
+        onUpdated?.(data.order);
+      }
+
+      setIsPickupModalOpen(false);
+    } catch (error) {
+      setPickupError(error.response?.data?.message || "Unable to schedule pickup.");
+    } finally {
+      setIsSchedulingPickup(false);
+    }
+  };
+
+  const handleRefreshTracking = async () => {
+    setIsTracking(true);
+    setTrackingError("");
+
+    try {
+      const data = await trackShipment(order._id);
+
+      if (data?.order) {
+        onUpdated?.(data.order);
+      }
+    } catch (error) {
+      setTrackingError(error.response?.data?.message || "Unable to refresh shipment tracking.");
+    } finally {
+      setIsTracking(false);
+    }
+  };
+
   return (
     <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
       <ShipmentHeader />
@@ -161,6 +211,42 @@ export default function ShipmentCard({ order, onUpload }) {
         />
       </div>
 
+      {shipment.awbCode && (
+        <button
+          type="button"
+          onClick={handleRefreshTracking}
+          disabled={isTracking}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-semibold text-[#242424] transition hover:bg-[#FFF9F5] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw size={15} className={isTracking ? "animate-spin" : ""} />
+
+          {isTracking ? "Refreshing..." : "Refresh Tracking"}
+        </button>
+      )}
+
+      <ShipmentInfoRow
+        label="Last Updated"
+        value={shipment.lastTrackedAt ? formatDateTime(shipment.lastTrackedAt) : null}
+      />
+
+      {shipment.trackingUrl && (
+        <a
+          href={shipment.trackingUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#FFF9F5] px-4 py-2.5 text-sm font-semibold text-[#FF5A5F] transition hover:bg-[#FFF0F0]"
+        >
+          <ExternalLink size={15} />
+          Track Shipment
+        </a>
+      )}
+
+      {trackingError && (
+        <div className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
+          <p className="text-xs leading-5 text-red-600">{trackingError}</p>
+        </div>
+      )}
+
       {/* Action */}
       {!isAwbAssigned && (
         <button
@@ -176,6 +262,10 @@ export default function ShipmentCard({ order, onUpload }) {
       {isAwbAssigned && (
         <button
           type="button"
+          onClick={() => {
+            setPickupError("");
+            setIsPickupModalOpen(true);
+          }}
           className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] px-4 py-3 text-sm font-semibold text-[#242424] transition hover:bg-[#FFF9F5]"
         >
           <Truck size={16} />
@@ -195,6 +285,19 @@ export default function ShipmentCard({ order, onUpload }) {
         onSelectCourier={setSelectedCourierId}
         onAssign={handleAssignCourier}
         isAssigning={isAssigning}
+      />
+
+      <SchedulePickupModal
+        isOpen={isPickupModalOpen}
+        onClose={() => {
+          if (isSchedulingPickup) return;
+
+          setIsPickupModalOpen(false);
+          setPickupError("");
+        }}
+        onSchedule={handleSchedulePickup}
+        isScheduling={isSchedulingPickup}
+        error={pickupError}
       />
     </section>
   );
