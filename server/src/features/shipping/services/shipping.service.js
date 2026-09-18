@@ -6,6 +6,7 @@ import Order from "../../../models/Order.js";
 
 import { SHIPMENT_STATUS } from "../../../models/Order.js";
 
+import { USER_ROLES } from "../../../constants/roles.js";
 import mongoose from "mongoose";
 
 /*
@@ -769,6 +770,48 @@ const addTrackingEvent = (order, event) => {
   order.shipment.trackingEvents.push(event);
 };
 
+const getTrackingForOrder = async ({ orderId, user }) => {
+  const query = {
+    _id: orderId,
+  };
+
+  if (user.role === USER_ROLES.CUSTOMER) {
+    query.user = user._id;
+  }
+
+  const order = await Order.findOne(query).select("orderNumber orderStatus shipment user").lean();
+
+  if (!order) {
+    throw new ApiError(404, "Order not found.");
+  }
+
+  if (!order.shipment) {
+    throw new ApiError(404, "Shipment information is not available for this order.");
+  }
+
+  return {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    orderStatus: order.orderStatus,
+
+    shipment: {
+      courierName: order.shipment.courierName || null,
+      awbCode: order.shipment.awbCode || null,
+      currentStatus: order.shipment.currentStatus || null,
+
+      trackingUrl: order.shipment.trackingUrl || null,
+
+      pickupScheduledAt: order.shipment.pickupScheduledAt || null,
+
+      estimatedDeliveryAt: order.shipment.estimatedDeliveryAt || null,
+
+      lastTrackedAt: order.shipment.lastTrackedAt || null,
+
+      trackingEvents: order.shipment.trackingEvents || [],
+    },
+  };
+};
+
 const shippingService = {
   getShippingQuote,
   createShipmentForOrder,
@@ -777,6 +820,7 @@ const shippingService = {
   assignCourierToOrder,
   schedulePickupForOrder,
   trackOrderShipment,
+  getTrackingForOrder,
 };
 
 export default shippingService;

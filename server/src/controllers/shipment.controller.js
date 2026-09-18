@@ -133,10 +133,25 @@ const shiprocketTrackingWebhook = async (req, res) => {
   }
 };
 
+const getTracking = async (req, res) => {
+  const { orderId } = req.params;
+
+  const tracking = await shippingService.getTrackingForOrder({
+    orderId,
+    user: req.user,
+  });
+
+  res.status(200).json({
+    success: true,
+    data: tracking,
+  });
+};
+
 export {
   getAvailableCouriers,
   assignCourier,
   schedulePickup,
   trackShipment,
   shiprocketTrackingWebhook,
+  getTracking,
 };

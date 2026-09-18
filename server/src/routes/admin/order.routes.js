@@ -18,9 +18,13 @@ import {
   schedulePickup,
   trackShipment,
   shiprocketTrackingWebhook,
+  getTracking,
 } from "../../controllers/shipment.controller.js";
 
 const router = express.Router();
+
+router.post("/webhooks/shiprocket/tracking", shiprocketTrackingWebhook);
+router.get("/:orderId/tracking", authenticate, getTracking);
 
 router.use(authenticate, authorize(USER_ROLES.ADMIN));
 
@@ -32,24 +36,12 @@ router.patch("/:id/status", updateAdminOrderStatus);
 
 router.patch("/:id/cancel", cancelAdminOrder);
 
-router.get(
-  "/:orderId/shipping/couriers",
-  authenticate,
-  authorize(USER_ROLES.ADMIN),
-  getAvailableCouriers
-);
+router.get("/:orderId/shipping/couriers", getAvailableCouriers);
 
-router.post(
-  "/:orderId/shipping/assign-courier",
-  authenticate,
-  authorize(USER_ROLES.ADMIN),
-  assignCourier
-);
+router.post("/:orderId/shipping/assign-courier", assignCourier);
 
 router.patch("/:orderId/pickup", schedulePickup);
 
 router.get("/:orderId/tracking", trackShipment);
-
-router.post("/webhooks/shiprocket/tracking", shiprocketTrackingWebhook);
 
 export default router;

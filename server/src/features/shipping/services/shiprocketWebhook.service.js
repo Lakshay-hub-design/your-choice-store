@@ -1,6 +1,6 @@
 import Order from "../../../models/Order.js";
 import ApiError from "../../../utils/ApiError.js";
-import { ORDER_STATUS, SHIPMENT_STATUS } from "../constants/shipping.constants.js";
+import { ORDER_STATUS, SHIPMENT_STATUS } from "../../../models/Order.js";
 
 const normalizeStatus = (status = "") => {
   return status.toString().trim().toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");

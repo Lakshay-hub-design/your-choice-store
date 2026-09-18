@@ -419,7 +419,7 @@ orderSchema.index(
   }
 );
 
-OrderSchema.index({
+orderSchema.index({
   "shipment.awbCode": 1,
 });
 
