@@ -1,8 +1,8 @@
 "use client";
 
-import { CheckCircle2, Copy, Package, Truck, RefreshCw, ExternalLink } from "lucide-react";
-
 import { useState } from "react";
+
+import { CheckCircle2, Copy, ExternalLink, Package, Truck } from "lucide-react";
 
 import CourierSelectionModal from "./CourierSelectionModal";
 import SchedulePickupModal from "./SchedulePickupModal";
@@ -11,38 +11,37 @@ import {
   getAvailableCouriers,
   assignCourier,
   schedulePickup,
-  trackShipment,
 } from "@/features/admin/orders/services/adminOrderService";
 
-export default function ShipmentCard({ order, onUpload }) {
+export default function ShipmentCard({ order, onUpdated }) {
   const [copiedField, setCopiedField] = useState("");
 
+  // Courier selection
   const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
 
   const [couriers, setCouriers] = useState([]);
-
   const [packageDetails, setPackageDetails] = useState(null);
-
   const [isLoadingCouriers, setIsLoadingCouriers] = useState(false);
 
   const [fetchError, setFetchError] = useState("");
   const [assignError, setAssignError] = useState("");
-
   const [selectedCourierId, setSelectedCourierId] = useState(null);
-
   const [isAssigning, setIsAssigning] = useState(false);
 
+  // Pickup
   const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
 
   const [isSchedulingPickup, setIsSchedulingPickup] = useState(false);
 
   const [pickupError, setPickupError] = useState("");
 
-  const [isTracking, setIsTracking] = useState(false);
-
-  const [trackingError, setTrackingError] = useState("");
-
   const shipment = order?.shipment;
+
+  /*
+   * --------------------------------------------------------------------------
+   * No shipment
+   * --------------------------------------------------------------------------
+   */
 
   if (!shipment) {
     return (
@@ -63,11 +62,20 @@ export default function ShipmentCard({ order, onUpload }) {
   const status = shipment.currentStatus || "—";
   const isAwbAssigned = Boolean(shipment.awbCode);
 
+  /*
+   * --------------------------------------------------------------------------
+   * Clipboard
+   * --------------------------------------------------------------------------
+   */
+
   const copyToClipboard = async (value, field) => {
-    if (!value) return;
+    if (!value) {
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(String(value));
+
       setCopiedField(field);
 
       setTimeout(() => {
@@ -78,11 +86,16 @@ export default function ShipmentCard({ order, onUpload }) {
     }
   };
 
+  /*
+   * --------------------------------------------------------------------------
+   * Courier
+   * --------------------------------------------------------------------------
+   */
+
   const openCourierModal = async () => {
     setIsCourierModalOpen(true);
 
     setIsLoadingCouriers(true);
-
     setFetchError("");
     setAssignError("");
 
@@ -103,12 +116,12 @@ export default function ShipmentCard({ order, onUpload }) {
   };
 
   const closeCourierModal = () => {
-    if (isAssigning) return;
+    if (isAssigning) {
+      return;
+    }
 
     setIsCourierModalOpen(false);
-
     setSelectedCourierId(null);
-
     setFetchError("");
     setAssignError("");
   };
@@ -118,10 +131,10 @@ export default function ShipmentCard({ order, onUpload }) {
       return;
     }
 
-    setIsAssigning(true);
-    setAssignError("");
-
     try {
+      setIsAssigning(true);
+      setAssignError("");
+
       const data = await assignCourier(order._id, selectedCourierId);
 
       if (data?.order) {
@@ -137,11 +150,17 @@ export default function ShipmentCard({ order, onUpload }) {
     }
   };
 
-  const handleSchedulePickup = async (pickupDate) => {
-    setIsSchedulingPickup(true);
-    setPickupError("");
+  /*
+   * --------------------------------------------------------------------------
+   * Pickup
+   * --------------------------------------------------------------------------
+   */
 
+  const handleSchedulePickup = async (pickupDate) => {
     try {
+      setIsSchedulingPickup(true);
+      setPickupError("");
+
       const data = await schedulePickup(order._id, pickupDate);
 
       if (data?.order) {
@@ -156,28 +175,17 @@ export default function ShipmentCard({ order, onUpload }) {
     }
   };
 
-  const handleRefreshTracking = async () => {
-    setIsTracking(true);
-    setTrackingError("");
-
-    try {
-      const data = await trackShipment(order._id);
-
-      if (data?.order) {
-        onUpdated?.(data.order);
-      }
-    } catch (error) {
-      setTrackingError(error.response?.data?.message || "Unable to refresh shipment tracking.");
-    } finally {
-      setIsTracking(false);
-    }
-  };
+  /*
+   * --------------------------------------------------------------------------
+   * Render
+   * --------------------------------------------------------------------------
+   */
 
   return (
     <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
       <ShipmentHeader />
 
-      {/* Status */}
+      {/* Shipment Status */}
       <div className="mt-4">
         <ShipmentStatus status={status} />
       </div>
@@ -209,45 +217,27 @@ export default function ShipmentCard({ order, onUpload }) {
           copied={copiedField === "awbCode"}
           onCopy={() => copyToClipboard(shipment.awbCode, "awbCode")}
         />
+
+        <ShipmentInfoRow
+          label="Last Updated"
+          value={shipment.lastTrackedAt ? formatDateTime(shipment.lastTrackedAt) : null}
+        />
       </div>
 
-      {shipment.awbCode && (
-        <button
-          type="button"
-          onClick={handleRefreshTracking}
-          disabled={isTracking}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-semibold text-[#242424] transition hover:bg-[#FFF9F5] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw size={15} className={isTracking ? "animate-spin" : ""} />
-
-          {isTracking ? "Refreshing..." : "Refresh Tracking"}
-        </button>
-      )}
-
-      <ShipmentInfoRow
-        label="Last Updated"
-        value={shipment.lastTrackedAt ? formatDateTime(shipment.lastTrackedAt) : null}
-      />
-
+      {/* External Tracking */}
       {shipment.trackingUrl && (
         <a
           href={shipment.trackingUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#FFF9F5] px-4 py-2.5 text-sm font-semibold text-[#FF5A5F] transition hover:bg-[#FFF0F0]"
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#FFF9F5] px-4 py-2.5 text-sm font-semibold text-[#FF5A5F] transition hover:bg-[#FFF0F0]"
         >
           <ExternalLink size={15} />
           Track Shipment
         </a>
       )}
 
-      {trackingError && (
-        <div className="mt-3 rounded-xl border border-red-100 bg-red-50 p-3">
-          <p className="text-xs leading-5 text-red-600">{trackingError}</p>
-        </div>
-      )}
-
-      {/* Action */}
+      {/* Assign Courier */}
       {!isAwbAssigned && (
         <button
           type="button"
@@ -259,6 +249,7 @@ export default function ShipmentCard({ order, onUpload }) {
         </button>
       )}
 
+      {/* Schedule Pickup */}
       {isAwbAssigned && (
         <button
           type="button"
@@ -273,6 +264,7 @@ export default function ShipmentCard({ order, onUpload }) {
         </button>
       )}
 
+      {/* Courier Selection Modal */}
       <CourierSelectionModal
         isOpen={isCourierModalOpen}
         onClose={closeCourierModal}
@@ -287,21 +279,30 @@ export default function ShipmentCard({ order, onUpload }) {
         isAssigning={isAssigning}
       />
 
+      {/* Schedule Pickup Modal */}
       <SchedulePickupModal
         isOpen={isPickupModalOpen}
         onClose={() => {
-          if (isSchedulingPickup) return;
+          if (isSchedulingPickup) {
+            return;
+          }
 
           setIsPickupModalOpen(false);
           setPickupError("");
         }}
         onSchedule={handleSchedulePickup}
-        isScheduling={isSchedulingPickup}
+        isSchedulingPickup={isSchedulingPickup}
         error={pickupError}
       />
     </section>
   );
 }
+
+/*
+ * ----------------------------------------------------------------------------
+ * Header
+ * ----------------------------------------------------------------------------
+ */
 
 function ShipmentHeader() {
   return (
@@ -312,6 +313,12 @@ function ShipmentHeader() {
     </div>
   );
 }
+
+/*
+ * ----------------------------------------------------------------------------
+ * Shipment Status
+ * ----------------------------------------------------------------------------
+ */
 
 function ShipmentStatus({ status }) {
   const styles = {
@@ -344,6 +351,12 @@ function ShipmentStatus({ status }) {
   );
 }
 
+/*
+ * ----------------------------------------------------------------------------
+ * Information Row
+ * ----------------------------------------------------------------------------
+ */
+
 function ShipmentInfoRow({ label, value, copyable = false, copied = false, onCopy }) {
   return (
     <div className="flex items-start justify-between gap-4 text-sm">
@@ -369,8 +382,36 @@ function ShipmentInfoRow({ label, value, copyable = false, copied = false, onCop
   );
 }
 
+/*
+ * ----------------------------------------------------------------------------
+ * Formatters
+ * ----------------------------------------------------------------------------
+ */
+
+function formatDateTime(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatShipmentStatus(status = "") {
-  if (!status) return "—";
+  if (!status) {
+    return "—";
+  }
 
   return status
     .replaceAll("_", " ")
