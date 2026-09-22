@@ -2,29 +2,28 @@
 
 import { useState } from "react";
 
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Truck, XCircle } from "lucide-react";
 
 import { toast } from "sonner";
 
 import {
   cancelAdminOrder,
   updateAdminOrderStatus,
+  getAvailableCouriers,
+  assignCourier,
+  schedulePickup,
 } from "@/features/admin/orders/services/adminOrderService";
 
 import AdminCancelOrderModal from "./AdminCancelOrderModal";
+import CourierSelectionModal from "./CourierSelectionModal";
+import SchedulePickupModal from "./SchedulePickupModal";
 
 const NEXT_STATUS = {
   PLACED: "CONFIRMED",
-  CONFIRMED: "PROCESSING",
-  PROCESSING: "SHIPPED",
-  SHIPPED: "DELIVERED",
 };
 
 const LABELS = {
   CONFIRMED: "Confirm Order",
-  PROCESSING: "Start Processing",
-  SHIPPED: "Mark as Shipped",
-  DELIVERED: "Mark as Delivered",
 };
 
 export default function AdminOrderStatus({ order, onUpdated }) {
@@ -34,9 +33,49 @@ export default function AdminOrderStatus({ order, onUpdated }) {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
 
+  /*
+   * --------------------------------------------------------------------------
+   * Courier Selection
+   * --------------------------------------------------------------------------
+   */
+
+  const [showCourierModal, setShowCourierModal] = useState(false);
+
+  const [couriers, setCouriers] = useState([]);
+
+  const [packageDetails, setPackageDetails] = useState(null);
+
+  const [isLoadingCouriers, setIsLoadingCouriers] = useState(false);
+
+  const [courierFetchError, setCourierFetchError] = useState("");
+
+  const [courierAssignError, setCourierAssignError] = useState("");
+
+  const [selectedCourierId, setSelectedCourierId] = useState(null);
+
+  const [isAssigningCourier, setIsAssigningCourier] = useState(false);
+
+  /*
+   * --------------------------------------------------------------------------
+   * Pickup Scheduling
+   * --------------------------------------------------------------------------
+   */
+
+  const [showPickupModal, setShowPickupModal] = useState(false);
+
+  const [isSchedulingPickup, setIsSchedulingPickup] = useState(false);
+
+  const [pickupError, setPickupError] = useState("");
+
   const nextStatus = NEXT_STATUS[order.orderStatus];
 
   const canCancel = ["PLACED", "CONFIRMED", "PROCESSING"].includes(order.orderStatus);
+
+  /*
+   * --------------------------------------------------------------------------
+   * Order Status
+   * --------------------------------------------------------------------------
+   */
 
   const handleUpdate = async () => {
     if (!nextStatus) {
@@ -57,6 +96,135 @@ export default function AdminOrderStatus({ order, onUpdated }) {
       setIsUpdating(false);
     }
   };
+
+  /*
+   * --------------------------------------------------------------------------
+   * Open Courier Selection
+   * --------------------------------------------------------------------------
+   */
+
+  const handleOpenSchedulePickup = async () => {
+    setShowCourierModal(true);
+
+    setIsLoadingCouriers(true);
+
+    setCourierFetchError("");
+    setCourierAssignError("");
+
+    setCouriers([]);
+    setPackageDetails(null);
+    setSelectedCourierId(null);
+
+    try {
+      const data = await getAvailableCouriers(order._id);
+
+      setCouriers(data?.couriers || []);
+
+      setPackageDetails(data?.package || null);
+    } catch (error) {
+      setCourierFetchError(error.response?.data?.message || "Unable to load available couriers.");
+    } finally {
+      setIsLoadingCouriers(false);
+    }
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * Close Courier Modal
+   * --------------------------------------------------------------------------
+   */
+
+  const handleCloseCourierModal = () => {
+    if (isAssigningCourier) {
+      return;
+    }
+
+    setShowCourierModal(false);
+
+    setSelectedCourierId(null);
+
+    setCourierFetchError("");
+    setCourierAssignError("");
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * Assign Courier / AWB
+   * --------------------------------------------------------------------------
+   */
+
+  const handleAssignCourier = async () => {
+    if (!selectedCourierId) {
+      return;
+    }
+
+    try {
+      setIsAssigningCourier(true);
+
+      setCourierAssignError("");
+
+      const data = await assignCourier(order._id, selectedCourierId);
+
+      /*
+       * Update parent order with the newly assigned AWB.
+       */
+      if (data?.order) {
+        onUpdated(data.order);
+      }
+
+      /*
+       * Close courier selection.
+       */
+      setShowCourierModal(false);
+
+      setSelectedCourierId(null);
+
+      /*
+       * Open pickup date modal.
+       */
+      setPickupError("");
+
+      setShowPickupModal(true);
+    } catch (error) {
+      setCourierAssignError(error.response?.data?.message || "Unable to assign courier.");
+    } finally {
+      setIsAssigningCourier(false);
+    }
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * Schedule Pickup
+   * --------------------------------------------------------------------------
+   */
+
+  const handleSchedulePickup = async (pickupDate) => {
+    try {
+      setIsSchedulingPickup(true);
+
+      setPickupError("");
+
+      const data = await schedulePickup(order._id, pickupDate);
+
+      if (data?.order) {
+        onUpdated(data.order);
+      }
+
+      setShowPickupModal(false);
+
+      toast.success("Pickup scheduled successfully.");
+    } catch (error) {
+      setPickupError(error.response?.data?.message || "Unable to schedule pickup.");
+    } finally {
+      setIsSchedulingPickup(false);
+    }
+  };
+
+  /*
+   * --------------------------------------------------------------------------
+   * Cancel Order
+   * --------------------------------------------------------------------------
+   */
 
   const handleCancel = async (reason) => {
     try {
@@ -81,12 +249,14 @@ export default function AdminOrderStatus({ order, onUpdated }) {
       <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
         <h2 className="font-semibold text-[#242424]">Order Status</h2>
 
+        {/* Current Status */}
         <div className="mt-4">
           <p className="mb-1.5 text-xs text-[#9CA3AF]">Current Status</p>
 
           <OrderStatusBadge status={order.orderStatus} />
         </div>
 
+        {/* Confirm Order */}
         {nextStatus && (
           <div className="mt-5 border-t border-[#F0F0F0] pt-5">
             <p className="text-xs text-[#6B7280]">Next step</p>
@@ -115,10 +285,41 @@ export default function AdminOrderStatus({ order, onUpdated }) {
           </div>
         )}
 
+        {/* Schedule Pickup */}
+        {order.orderStatus === "CONFIRMED" && (
+          <div className="mt-5 border-t border-[#F0F0F0] pt-5">
+            <p className="text-xs text-[#6B7280]">Next step</p>
+
+            <p className="mt-1 text-sm font-semibold text-[#242424]">Schedule Shipment Pickup</p>
+
+            <button
+              type="button"
+              disabled={isUpdating || isCancelling || isLoadingCouriers || isAssigningCourier}
+              onClick={handleOpenSchedulePickup}
+              className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#FF5A5F] px-4 text-sm font-semibold text-white transition hover:bg-[#f1494e] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Truck size={16} />
+              Schedule Pickup
+            </button>
+          </div>
+        )}
+
+        {/* Processing Information */}
+        {order.orderStatus === "PROCESSING" && (
+          <div className="mt-5 rounded-xl bg-[#FFF9F5] p-4">
+            <p className="text-xs font-semibold text-[#242424]">Shipment in progress</p>
+
+            <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+              Courier pickup and shipment tracking are managed through Shiprocket.
+            </p>
+          </div>
+        )}
+
+        {/* Cancel */}
         {canCancel && (
           <button
             type="button"
-            disabled={isUpdating || isCancelling}
+            disabled={isUpdating || isCancelling || isAssigningCourier || isSchedulingPickup}
             onClick={() => setShowCancelModal(true)}
             className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -127,12 +328,14 @@ export default function AdminOrderStatus({ order, onUpdated }) {
           </button>
         )}
 
+        {/* Delivered */}
         {order.orderStatus === "DELIVERED" && (
           <p className="mt-4 text-xs leading-5 text-[#6B7280]">
             This order has been delivered and no further fulfillment actions are available.
           </p>
         )}
 
+        {/* Cancelled */}
         {order.orderStatus === "CANCELLED" && (
           <p className="mt-4 text-xs leading-5 text-[#6B7280]">
             This order has been cancelled and cannot be updated.
@@ -140,6 +343,7 @@ export default function AdminOrderStatus({ order, onUpdated }) {
         )}
       </div>
 
+      {/* Cancel Modal */}
       <AdminCancelOrderModal
         open={showCancelModal}
         order={order}
@@ -150,6 +354,35 @@ export default function AdminOrderStatus({ order, onUpdated }) {
           }
         }}
         onConfirm={handleCancel}
+      />
+
+      {/* Courier Selection */}
+      <CourierSelectionModal
+        isOpen={showCourierModal}
+        onClose={handleCloseCourierModal}
+        couriers={couriers}
+        packageDetails={packageDetails}
+        isLoading={isLoadingCouriers}
+        fetchError={courierFetchError}
+        assignError={courierAssignError}
+        selectedCourierId={selectedCourierId}
+        onSelectCourier={setSelectedCourierId}
+        onAssign={handleAssignCourier}
+        isAssigning={isAssigningCourier}
+      />
+
+      {/* Pickup Date */}
+      <SchedulePickupModal
+        isOpen={showPickupModal}
+        onClose={() => {
+          if (!isSchedulingPickup) {
+            setShowPickupModal(false);
+            setPickupError("");
+          }
+        }}
+        onSchedule={handleSchedulePickup}
+        isSchedulingPickup={isSchedulingPickup}
+        error={pickupError}
       />
     </>
   );
@@ -165,7 +398,11 @@ function OrderStatusBadge({ status }) {
 
     SHIPPED: "bg-purple-50 text-purple-600",
 
+    OUT_FOR_DELIVERY: "bg-orange-50 text-orange-600",
+
     DELIVERED: "bg-green-50 text-green-600",
+
+    RTO: "bg-red-50 text-red-600",
 
     CANCELLED: "bg-red-50 text-red-600",
   };
@@ -186,5 +423,8 @@ function formatStatus(status = "") {
     return "—";
   }
 
-  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  return status
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }

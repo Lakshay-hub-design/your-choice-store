@@ -1,31 +1,30 @@
 "use client";
 
 import { Check, RefreshCw } from "lucide-react";
-
 import { useState } from "react";
-
 import { toast } from "sonner";
-
-import { trackShipment } from "@/features/admin/orders/services/adminOrderService";
 
 export default function AdminOrderTimeline({ order, onUpdated }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const history = order?.statusHistory || [];
 
   if (!order) {
     return null;
   }
 
+  const history = order.statusHistory || [];
+
   const handleRefreshTracking = async () => {
     try {
       setIsRefreshing(true);
 
-      const data = await trackShipment(order._id);
-
-      if (data?.order) {
-        onUpdated?.(data.order);
-      }
+      /*
+       * The parent owns the actual order refresh.
+       *
+       * This guarantees we fetch the complete
+       * order instead of replacing it with a
+       * partial tracking response.
+       */
+      await onUpdated?.();
 
       toast.success("Order tracking refreshed.");
     } catch (error) {
@@ -109,7 +108,9 @@ function OrderStatusBadge({ status }) {
     CONFIRMED: "bg-indigo-50 text-indigo-600",
     PROCESSING: "bg-amber-50 text-amber-600",
     SHIPPED: "bg-purple-50 text-purple-600",
+    OUT_FOR_DELIVERY: "bg-orange-50 text-orange-600",
     DELIVERED: "bg-green-50 text-green-600",
+    RTO: "bg-red-50 text-red-600",
     CANCELLED: "bg-red-50 text-red-600",
   };
 

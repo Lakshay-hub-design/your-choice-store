@@ -2,38 +2,10 @@
 
 import { useState } from "react";
 
-import { CheckCircle2, Copy, ExternalLink, Package, Truck } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Package } from "lucide-react";
 
-import CourierSelectionModal from "./CourierSelectionModal";
-import SchedulePickupModal from "./SchedulePickupModal";
-
-import {
-  getAvailableCouriers,
-  assignCourier,
-  schedulePickup,
-} from "@/features/admin/orders/services/adminOrderService";
-
-export default function ShipmentCard({ order, onUpdated }) {
+export default function ShipmentCard({ order }) {
   const [copiedField, setCopiedField] = useState("");
-
-  // Courier selection
-  const [isCourierModalOpen, setIsCourierModalOpen] = useState(false);
-
-  const [couriers, setCouriers] = useState([]);
-  const [packageDetails, setPackageDetails] = useState(null);
-  const [isLoadingCouriers, setIsLoadingCouriers] = useState(false);
-
-  const [fetchError, setFetchError] = useState("");
-  const [assignError, setAssignError] = useState("");
-  const [selectedCourierId, setSelectedCourierId] = useState(null);
-  const [isAssigning, setIsAssigning] = useState(false);
-
-  // Pickup
-  const [isPickupModalOpen, setIsPickupModalOpen] = useState(false);
-
-  const [isSchedulingPickup, setIsSchedulingPickup] = useState(false);
-
-  const [pickupError, setPickupError] = useState("");
 
   const shipment = order?.shipment;
 
@@ -60,7 +32,6 @@ export default function ShipmentCard({ order, onUpdated }) {
   }
 
   const status = shipment.currentStatus || "—";
-  const isAwbAssigned = Boolean(shipment.awbCode);
 
   /*
    * --------------------------------------------------------------------------
@@ -83,95 +54,6 @@ export default function ShipmentCard({ order, onUpdated }) {
       }, 1500);
     } catch {
       // Ignore clipboard errors.
-    }
-  };
-
-  /*
-   * --------------------------------------------------------------------------
-   * Courier
-   * --------------------------------------------------------------------------
-   */
-
-  const openCourierModal = async () => {
-    setIsCourierModalOpen(true);
-
-    setIsLoadingCouriers(true);
-    setFetchError("");
-    setAssignError("");
-
-    setCouriers([]);
-    setPackageDetails(null);
-    setSelectedCourierId(null);
-
-    try {
-      const data = await getAvailableCouriers(order._id);
-
-      setCouriers(data?.couriers || []);
-      setPackageDetails(data?.package || null);
-    } catch (error) {
-      setFetchError(error.response?.data?.message || "Unable to load available couriers.");
-    } finally {
-      setIsLoadingCouriers(false);
-    }
-  };
-
-  const closeCourierModal = () => {
-    if (isAssigning) {
-      return;
-    }
-
-    setIsCourierModalOpen(false);
-    setSelectedCourierId(null);
-    setFetchError("");
-    setAssignError("");
-  };
-
-  const handleAssignCourier = async () => {
-    if (!selectedCourierId) {
-      return;
-    }
-
-    try {
-      setIsAssigning(true);
-      setAssignError("");
-
-      const data = await assignCourier(order._id, selectedCourierId);
-
-      if (data?.order) {
-        onUpdated?.(data.order);
-      }
-
-      setIsCourierModalOpen(false);
-      setSelectedCourierId(null);
-    } catch (error) {
-      setAssignError(error.response?.data?.message || "Unable to assign courier.");
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
-  /*
-   * --------------------------------------------------------------------------
-   * Pickup
-   * --------------------------------------------------------------------------
-   */
-
-  const handleSchedulePickup = async (pickupDate) => {
-    try {
-      setIsSchedulingPickup(true);
-      setPickupError("");
-
-      const data = await schedulePickup(order._id, pickupDate);
-
-      if (data?.order) {
-        onUpdated?.(data.order);
-      }
-
-      setIsPickupModalOpen(false);
-    } catch (error) {
-      setPickupError(error.response?.data?.message || "Unable to schedule pickup.");
-    } finally {
-      setIsSchedulingPickup(false);
     }
   };
 
@@ -219,6 +101,16 @@ export default function ShipmentCard({ order, onUpdated }) {
         />
 
         <ShipmentInfoRow
+          label="Pickup Scheduled"
+          value={shipment.pickupScheduledAt ? formatDateTime(shipment.pickupScheduledAt) : null}
+        />
+
+        <ShipmentInfoRow
+          label="Estimated Delivery"
+          value={shipment.estimatedDeliveryAt ? formatDateTime(shipment.estimatedDeliveryAt) : null}
+        />
+
+        <ShipmentInfoRow
           label="Last Updated"
           value={shipment.lastTrackedAt ? formatDateTime(shipment.lastTrackedAt) : null}
         />
@@ -236,64 +128,6 @@ export default function ShipmentCard({ order, onUpdated }) {
           Track Shipment
         </a>
       )}
-
-      {/* Assign Courier */}
-      {!isAwbAssigned && (
-        <button
-          type="button"
-          onClick={openCourierModal}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF5A5F] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#e94d52]"
-        >
-          <Truck size={16} />
-          Assign Courier
-        </button>
-      )}
-
-      {/* Schedule Pickup */}
-      {isAwbAssigned && (
-        <button
-          type="button"
-          onClick={() => {
-            setPickupError("");
-            setIsPickupModalOpen(true);
-          }}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] px-4 py-3 text-sm font-semibold text-[#242424] transition hover:bg-[#FFF9F5]"
-        >
-          <Truck size={16} />
-          Schedule Pickup
-        </button>
-      )}
-
-      {/* Courier Selection Modal */}
-      <CourierSelectionModal
-        isOpen={isCourierModalOpen}
-        onClose={closeCourierModal}
-        couriers={couriers}
-        packageDetails={packageDetails}
-        isLoading={isLoadingCouriers}
-        fetchError={fetchError}
-        assignError={assignError}
-        selectedCourierId={selectedCourierId}
-        onSelectCourier={setSelectedCourierId}
-        onAssign={handleAssignCourier}
-        isAssigning={isAssigning}
-      />
-
-      {/* Schedule Pickup Modal */}
-      <SchedulePickupModal
-        isOpen={isPickupModalOpen}
-        onClose={() => {
-          if (isSchedulingPickup) {
-            return;
-          }
-
-          setIsPickupModalOpen(false);
-          setPickupError("");
-        }}
-        onSchedule={handleSchedulePickup}
-        isSchedulingPickup={isSchedulingPickup}
-        error={pickupError}
-      />
     </section>
   );
 }
@@ -322,15 +156,26 @@ function ShipmentHeader() {
 
 function ShipmentStatus({ status }) {
   const styles = {
+    CREATING: "bg-gray-100 text-gray-600",
+
     CREATED: "bg-blue-50 text-blue-600",
+
     AWB_ASSIGNED: "bg-indigo-50 text-indigo-600",
+
     PICKUP_SCHEDULED: "bg-amber-50 text-amber-600",
+
     PICKED_UP: "bg-purple-50 text-purple-600",
+
     SHIPPED: "bg-purple-50 text-purple-600",
+
     IN_TRANSIT: "bg-orange-50 text-orange-600",
+
     OUT_FOR_DELIVERY: "bg-yellow-50 text-yellow-600",
+
     DELIVERED: "bg-green-50 text-green-600",
+
     RTO: "bg-red-50 text-red-600",
+
     FAILED: "bg-red-50 text-red-600",
   };
 

@@ -7,8 +7,8 @@ import Order from "../../../models/Order.js";
 import { SHIPMENT_STATUS } from "../../../models/Order.js";
 
 import { USER_ROLES } from "../../../constants/roles.js";
-import mongoose from "mongoose";
 
+import { updateOrderStatusFromShipment } from "./shipmentStatus.service.js";
 /*
  * --------------------------------
  * Calculate shipment package
@@ -649,21 +649,65 @@ const trackOrderShipment = async ({ orderId }) => {
     throw new ApiError(502, "Shiprocket did not return a shipment status.");
   }
 
-  order.shipment.currentStatus = mapShiprocketStatus(tracking.status);
+  const shipmentStatus = mapShiprocketStatus(tracking.status);
+
+  if (!shipmentStatus) {
+    throw new ApiError(502, `Unsupported Shiprocket shipment status: ${tracking.status}`);
+  }
+
+  /*
+   * --------------------------------------------------------------------------
+   * Update shipment status
+   * --------------------------------------------------------------------------
+   */
+
+  order.shipment.currentStatus = shipmentStatus;
 
   order.shipment.lastTrackedAt = new Date();
+
+  /*
+   * --------------------------------------------------------------------------
+   * Tracking URL
+   * --------------------------------------------------------------------------
+   */
 
   if (tracking.trackingUrl) {
     order.shipment.trackingUrl = tracking.trackingUrl;
   }
 
+  /*
+   * --------------------------------------------------------------------------
+   * Estimated delivery
+   * --------------------------------------------------------------------------
+   */
+
   if (tracking.estimatedDeliveryAt) {
     order.shipment.estimatedDeliveryAt = tracking.estimatedDeliveryAt;
   }
 
+  /*
+   * --------------------------------------------------------------------------
+   * Tracking event
+   * --------------------------------------------------------------------------
+   */
+
   if (tracking.event) {
     addTrackingEvent(order, tracking.event);
   }
+
+  /*
+   * --------------------------------------------------------------------------
+   * Sync order status
+   * --------------------------------------------------------------------------
+   */
+
+  const changedAt = tracking.event?.timestamp || new Date();
+
+  await updateOrderStatusFromShipment({
+    order,
+    shipmentStatus,
+    changedAt,
+  });
 
   await order.save();
 

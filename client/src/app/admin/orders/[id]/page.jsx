@@ -22,20 +22,32 @@ export default function AdminOrderDetailsPage({ params }) {
 
   const [error, setError] = useState("");
 
+  const refreshOrder = useCallback(async () => {
+    try {
+      const data = await getAdminOrderById(id);
+
+      setOrder(data);
+
+      return data;
+    } catch (error) {
+      console.error("ORDER REFRESH ERROR:", error.response?.data || error);
+
+      throw error;
+    }
+  }, [id]);
+
   const loadOrder = useCallback(async () => {
     try {
       setIsLoading(true);
       setError("");
 
-      const data = await getAdminOrderById(id);
-
-      setOrder(data);
+      await refreshOrder();
     } catch (error) {
       setError(error.response?.data?.message || "Unable to load order.");
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [refreshOrder]);
 
   useEffect(() => {
     loadOrder();
@@ -87,13 +99,13 @@ export default function AdminOrderDetailsPage({ params }) {
 
           <OrderPricing pricing={order.pricing} />
 
-          <AdminOrderTimeline history={order.statusHistory} />
+          <AdminOrderTimeline order={order} onUpdated={refreshOrder} />
         </div>
 
         {/* RIGHT */}
 
         <div className="space-y-5 xl:sticky xl:top-6">
-          <AdminOrderStatus order={order} onUpdated={setOrder} />
+          <AdminOrderStatus order={order} onUpdated={refreshOrder} />
 
           <CustomerCard order={order} />
 

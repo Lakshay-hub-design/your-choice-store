@@ -16,6 +16,7 @@ import {
   PackageCheck,
   XCircle,
   Truck,
+  IndianRupee,
 } from "lucide-react";
 
 import {
@@ -23,6 +24,7 @@ import {
   approveReturnRequest,
   rejectReturnRequest,
   markReturnAsReceived,
+  processRefund,
 } from "@/features/returns/services/adminReturnService";
 
 import ReturnInspection from "@/features/returns/components/ReturnInspection";
@@ -68,6 +70,7 @@ export default function ReturnDetailsPage() {
   const [actionError, setActionError] = useState("");
 
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
 
   const [adminNote, setAdminNote] = useState("");
 
@@ -146,6 +149,22 @@ export default function ReturnDetailsPage() {
       setReturnRequest(updated);
     } catch (error) {
       setActionError(error?.response?.data?.message || "Unable to mark return as received.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleProcessRefund = async () => {
+    try {
+      setActionLoading(true);
+      setActionError("");
+
+      const updated = await processRefund(returnRequest._id);
+
+      setReturnRequest(updated);
+      setRefundModalOpen(false);
+    } catch (error) {
+      setActionError(error?.response?.data?.message || "Unable to process refund.");
     } finally {
       setActionLoading(false);
     }
@@ -264,10 +283,6 @@ export default function ReturnDetailsPage() {
               Approve Return
             </button>
           </div>
-
-          <p className="mt-3 text-right text-[11px] text-[#9CA3AF]">
-            Approval and rejection will be enabled in the next step.
-          </p>
         </div>
       )}
 
@@ -330,6 +345,18 @@ export default function ReturnDetailsPage() {
               </div>
             </div>
           )}
+
+          {returnRequest.status === "INSPECTED" &&
+            returnRequest.inspection?.result === "ACCEPTED" && (
+              <RefundSection
+                returnRequest={returnRequest}
+                onProcessRefund={() => {
+                  setActionError("");
+                  setRefundModalOpen(true);
+                }}
+                actionLoading={actionLoading}
+              />
+            )}
         </div>
 
         {/* Right */}
@@ -342,6 +369,21 @@ export default function ReturnDetailsPage() {
           <ReturnInformation returnRequest={returnRequest} />
         </div>
       </div>
+      {refundModalOpen && (
+        <RefundConfirmationModal
+          returnRequest={returnRequest}
+          actionLoading={actionLoading}
+          actionError={actionError}
+          onCancel={() => {
+            if (!actionLoading) {
+              setRefundModalOpen(false);
+              setActionError("");
+            }
+          }}
+          onConfirm={handleProcessRefund}
+        />
+      )}
+
       {rejectModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -576,6 +618,184 @@ function OrderCard({ order }) {
         <InfoRow label="Order Date" value={formatDate(order?.createdAt)} />
       </div>
     </section>
+  );
+}
+
+/*
+ * ==========================================
+ * Refund section
+ * ==========================================
+ */
+
+function RefundSection({ returnRequest, onProcessRefund, actionLoading }) {
+  const refund = returnRequest?.refund;
+  const amount = Number(refund?.amount || 0);
+  const refundStatus = refund?.status || "PENDING";
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white">
+      <div className="flex items-center justify-between gap-4 border-b border-[#EDE9E6] px-5 py-4">
+        <div>
+          <h2 className="font-bold text-[#242424]">Refund</h2>
+          <p className="mt-1 text-xs text-[#6B7280]">
+            Refund can be processed after a successful inspection.
+          </p>
+        </div>
+        <StatusBadge status={refundStatus} />
+      </div>
+
+      <div className="p-5">
+        <div className="rounded-2xl bg-[#FFF9F5] p-5">
+          <p className="text-xs font-semibold tracking-wide text-[#9CA3AF] uppercase">
+            Refund Amount
+          </p>
+          <p className="mt-2 text-3xl font-bold text-[#242424]">
+            ₹{amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <InfoRow label="Payment Method" value={returnRequest.order?.paymentMethod || "—"} />
+          <InfoRow label="Provider" value={refund?.provider || "Not started"} />
+          <InfoRow label="Refund ID" value={refund?.refundId || "—"} />
+          <InfoRow label="Processed At" value={formatDateTime(refund?.processedAt)} />
+        </div>
+
+        {refundStatus === "PENDING" && (
+          <button
+            type="button"
+            disabled={actionLoading || amount <= 0}
+            onClick={onProcessRefund}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF5A5F] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#e94d52] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <IndianRupee size={17} />
+            Process Refund
+          </button>
+        )}
+
+        {amount <= 0 && refundStatus === "PENDING" && (
+          <p className="mt-2 text-center text-xs text-red-500">
+            Refund amount is not available. Refund cannot be processed.
+          </p>
+        )}
+
+        {refundStatus === "PROCESSING" && (
+          <div className="mt-5 rounded-xl border border-orange-200 bg-orange-50 p-4">
+            <p className="text-xs font-semibold text-orange-700">Refund is processing</p>
+            <p className="mt-1 text-[11px] leading-5 text-orange-600">
+              The refund has been initiated and is awaiting provider confirmation.
+            </p>
+          </div>
+        )}
+
+        {refundStatus === "COMPLETED" && (
+          <div className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4">
+            <p className="text-xs font-semibold text-green-700">Refund completed</p>
+            <p className="mt-1 text-[11px] leading-5 text-green-600">
+              The refund has been successfully completed.
+            </p>
+          </div>
+        )}
+
+        {refundStatus === "FAILED" && (
+          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-xs font-semibold text-red-700">Refund failed</p>
+            <p className="mt-1 text-[11px] leading-5 text-red-600">
+              {refund?.failureReason || "The refund could not be completed."}
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/*
+ * ==========================================
+ * Refund confirmation modal
+ * ==========================================
+ */
+
+function RefundConfirmationModal({
+  returnRequest,
+  actionLoading,
+  actionError,
+  onCancel,
+  onConfirm,
+}) {
+  const amount = Number(returnRequest?.refund?.amount || 0);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+            <IndianRupee size={19} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-[#242424]">Confirm Refund</h2>
+            <p className="mt-1 text-sm leading-6 text-[#6B7280]">
+              Please verify the refund details before processing the refund.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3 rounded-xl bg-[#FFF9F5] p-4">
+          <InfoRow
+            label="Refund Amount"
+            value={`₹${amount.toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+            })}`}
+          />
+          <InfoRow label="Return ID" value={returnRequest?.returnNumber || "—"} />
+          <InfoRow
+            label="Order Number"
+            value={returnRequest?.order?.orderNumber ? `#${returnRequest.order.orderNumber}` : "—"}
+          />
+          <InfoRow label="Inspection" value="Accepted" />
+          <InfoRow label="Payment Method" value={returnRequest?.order?.paymentMethod || "—"} />
+        </div>
+
+        <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-4">
+          <p className="text-xs font-semibold text-orange-700">Important</p>
+          <p className="mt-1 text-[11px] leading-5 text-orange-600">
+            This action will initiate the refund for the amount shown above. Make sure the returned
+            item has passed inspection before continuing.
+          </p>
+        </div>
+
+        {actionError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-xs text-red-600">{actionError}</p>
+          </div>
+        )}
+
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            disabled={actionLoading}
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-[#EDE9E6] px-4 py-3 text-sm font-semibold text-[#242424] transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={actionLoading || amount <= 0}
+            onClick={onConfirm}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#FF5A5F] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#e94d52] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionLoading ? (
+              <Loader2 size={17} className="animate-spin" />
+            ) : (
+              <IndianRupee size={17} />
+            )}
+            Confirm Refund
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

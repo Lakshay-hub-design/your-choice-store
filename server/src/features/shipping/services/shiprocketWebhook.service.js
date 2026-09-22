@@ -2,6 +2,8 @@ import Order from "../../../models/Order.js";
 import ApiError from "../../../utils/ApiError.js";
 import { ORDER_STATUS, SHIPMENT_STATUS } from "../../../models/Order.js";
 
+import { updateOrderStatusFromShipment } from "./shipmentStatus.service.js";
+
 const normalizeStatus = (status = "") => {
   return status.toString().trim().toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 };
@@ -80,30 +82,6 @@ const addTrackingEvents = (order, scans = []) => {
 
     if (!alreadyExists) {
       order.shipment.trackingEvents.push(event);
-    }
-  }
-};
-
-const updateOrderStatusFromShipment = (order, shipmentStatus) => {
-  if (shipmentStatus === SHIPMENT_STATUS.SHIPPED) {
-    if (![ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED].includes(order.orderStatus)) {
-      order.orderStatus = ORDER_STATUS.SHIPPED;
-    }
-
-    return;
-  }
-
-  if (shipmentStatus === SHIPMENT_STATUS.OUT_FOR_DELIVERY) {
-    if (![ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED].includes(order.orderStatus)) {
-      order.orderStatus = ORDER_STATUS.SHIPPED;
-    }
-
-    return;
-  }
-
-  if (shipmentStatus === SHIPMENT_STATUS.DELIVERED) {
-    if (order.orderStatus !== ORDER_STATUS.CANCELLED) {
-      order.orderStatus = ORDER_STATUS.DELIVERED;
     }
   }
 };
@@ -213,7 +191,13 @@ const processShipmentWebhook = async ({ payload }) => {
   /*
    * Update customer-facing order status.
    */
-  updateOrderStatusFromShipment(order, shipmentStatus);
+  const eventTimestamp = parseWebhookDate(payload.current_timestamp) || new Date();
+
+  await updateOrderStatusFromShipment({
+    order,
+    shipmentStatus,
+    changedAt: eventTimestamp,
+  });
 
   await order.save();
 

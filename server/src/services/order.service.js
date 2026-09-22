@@ -1953,11 +1953,15 @@ const updateAdminOrderStatus = async ({ orderId, status }) => {
 
     [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.PROCESSING],
 
-    [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPED],
+    [ORDER_STATUS.PROCESSING]: [],
 
-    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED],
+    [ORDER_STATUS.SHIPPED]: [],
+
+    [ORDER_STATUS.OUT_FOR_DELIVERY]: [],
 
     [ORDER_STATUS.DELIVERED]: [],
+
+    [ORDER_STATUS.RTO]: [],
 
     [ORDER_STATUS.CANCELLED]: [],
   };
@@ -1978,30 +1982,59 @@ const updateAdminOrderStatus = async ({ orderId, status }) => {
     throw new ApiError(400, `Order cannot be changed from ${order.orderStatus} to ${status}`);
   }
 
-  const changedAt = new Date();
+  await updateOrderStatus({
+    order,
+    status,
+  });
+
+  await order.save();
+
+  return order.populate("user", "displayName username email phone");
+};
+
+const updateOrderStatus = async ({ order, status, changedAt = new Date() }) => {
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  if (!Object.values(ORDER_STATUS).includes(status)) {
+    throw new ApiError(400, "Invalid order status");
+  }
+
+  if (order.orderStatus === status) {
+    return false;
+  }
 
   order.orderStatus = status;
 
-  order.statusHistory.push({
-    status,
-    timestamp: changedAt,
-  });
+  const lastHistoryEntry = order.statusHistory?.[order.statusHistory.length - 1];
+
+  if (lastHistoryEntry?.status !== status) {
+    order.statusHistory.push({
+      status,
+      timestamp: changedAt,
+    });
+  }
 
   if (status === ORDER_STATUS.DELIVERED) {
     order.deliveredAt = changedAt;
 
     /*
-     * COD becomes paid when delivered.
+     * COD becomes paid when the order is delivered.
      */
     if (order.paymentMethod === "COD") {
       order.paymentStatus = "PAID";
     }
   }
 
-  await order.save();
+  if (status === ORDER_STATUS.CANCELLED) {
+    order.cancelledAt = changedAt;
+  }
 
-  return order.populate("user", "displayName username email phone");
+  return true;
 };
+
+export { updateOrderStatus };
 
 const cancelAdminOrder = async ({ orderId, reason = "" }) => {
   if (!mongoose.Types.ObjectId.isValid(orderId)) {
@@ -2150,6 +2183,7 @@ const orderService = {
   getAdminOrders,
   getAdminOrderById,
   updateAdminOrderStatus,
+  updateOrderStatus,
   cancelAdminOrder,
 };
 

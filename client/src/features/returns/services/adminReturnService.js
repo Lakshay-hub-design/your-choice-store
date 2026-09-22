@@ -48,3 +48,9 @@ export const inspectReturn = async ({ returnId, inspectionResult, inspectionNote
 
   return response.data;
 };
+
+export const processRefund = async (returnId) => {
+  const response = await api.patch(`/admin/returns/${returnId}/refund`);
+
+  return response.data.data;
+};
