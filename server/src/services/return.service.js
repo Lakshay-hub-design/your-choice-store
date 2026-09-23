@@ -9,6 +9,8 @@ import { generateReturnNumber } from "../utils/generateReturnNumber.js";
 
 import { uploadImage, deleteImages } from "./image.service.js";
 
+import RETURN_ADDRESS from "../config/returnAddress.js";
+
 const createReturnRequest = async ({ userId, orderId, items, reason, description, files = [] }) => {
   /*
    * ==========================================
@@ -329,15 +331,33 @@ const approveReturnRequest = async ({ returnId, adminId, adminNote = "" }) => {
   }
 
   /*
-   * Only pending requests can be approved.
+   * Only pending / under-review requests
+   * can be approved.
    */
-
   if (!["PENDING", "UNDER_REVIEW"].includes(returnRequest.status)) {
     throw new ApiError(
       409,
       `Return request cannot be approved from ${returnRequest.status} status`
     );
   }
+
+  /*
+   * Snapshot the return address.
+   *
+   * This address belongs to THIS return request.
+   * If the business address changes later,
+   * existing returns will still have the
+   * original destination.
+   */
+  returnRequest.returnAddress = {
+    name: RETURN_ADDRESS.name,
+    phone: RETURN_ADDRESS.phone,
+    addressLine1: RETURN_ADDRESS.addressLine1,
+    addressLine2: RETURN_ADDRESS.addressLine2,
+    city: RETURN_ADDRESS.city,
+    state: RETURN_ADDRESS.state,
+    postalCode: RETURN_ADDRESS.postalCode,
+  };
 
   returnRequest.status = "APPROVED";
 
@@ -346,6 +366,8 @@ const approveReturnRequest = async ({ returnId, adminId, adminNote = "" }) => {
   returnRequest.reviewedAt = new Date();
 
   returnRequest.adminNote = adminNote.trim();
+
+  returnRequest.approvedAt = new Date();
 
   await returnRequest.save();
 

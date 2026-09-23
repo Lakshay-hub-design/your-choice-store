@@ -188,34 +188,6 @@ function OrderHeader({ order, onCancel }) {
   );
 }
 
-const ORDER_STEPS = [
-  {
-    status: "PLACED",
-    label: "Order Placed",
-    icon: CheckCircle2,
-  },
-  {
-    status: "CONFIRMED",
-    label: "Confirmed",
-    icon: Check,
-  },
-  {
-    status: "PROCESSING",
-    label: "Processing",
-    icon: Box,
-  },
-  {
-    status: "SHIPPED",
-    label: "Shipped",
-    icon: Truck,
-  },
-  {
-    status: "DELIVERED",
-    label: "Delivered",
-    icon: Package,
-  },
-];
-
 function CancelOrderButton({ status, onCancel }) {
   const cancellableStatuses = ["PLACED", "CONFIRMED"];
 
@@ -236,15 +208,11 @@ function CancelOrderButton({ status, onCancel }) {
 }
 
 function OrderTimeline({ order }) {
-  const statusHistory = order.statusHistory || [];
+  const history = [...(order.statusHistory || [])].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 
-  const getHistoryEntry = (status) => {
-    return statusHistory.find((entry) => entry.status === status);
-  };
-
-  const cancelledEntry = getHistoryEntry("CANCELLED");
-
-  if (order.orderStatus === "CANCELLED" || cancelledEntry) {
+  if (order.orderStatus === "CANCELLED") {
     return (
       <section className="rounded-2xl border border-red-200 bg-white p-5 sm:p-6">
         <div className="flex items-start gap-3">
@@ -265,12 +233,29 @@ function OrderTimeline({ order }) {
               </div>
             )}
 
-            {(cancelledEntry?.timestamp || order.cancelledAt) && (
-              <p className="mt-1 text-xs text-[#9CA3AF]">
-                {formatDateTime(cancelledEntry?.timestamp || order.cancelledAt)}
-              </p>
+            {order.cancelledAt && (
+              <p className="mt-2 text-xs text-[#9CA3AF]">{formatDateTime(order.cancelledAt)}</p>
             )}
           </div>
+        </div>
+
+        {/* Show actual history below cancellation */}
+        {history.length > 0 && <TimelineHistory history={history} />}
+      </section>
+    );
+  }
+
+  if (!history.length) {
+    return (
+      <section className="rounded-2xl border border-[#EDE9E6] bg-white p-5 sm:p-6">
+        <div className="flex items-center gap-2">
+          <Clock3 size={18} className="text-[#FF5A5F]" />
+
+          <h2 className="font-bold text-[#242424]">Order Timeline</h2>
+        </div>
+
+        <div className="mt-5 rounded-xl bg-[#FFF9F5] p-4 text-center">
+          <p className="text-sm text-[#6B7280]">Order timeline is not available yet.</p>
         </div>
       </section>
     );
@@ -281,118 +266,161 @@ function OrderTimeline({ order }) {
       <div className="flex items-center gap-2">
         <Clock3 size={18} className="text-[#FF5A5F]" />
 
-        <h2 className="font-bold text-[#242424]">Order Status</h2>
+        <h2 className="font-bold text-[#242424]">Order Timeline</h2>
       </div>
 
+      <TimelineHistory history={history} />
+    </section>
+  );
+}
+
+function TimelineHistory({ history }) {
+  return (
+    <>
       {/* Desktop */}
-      <div className="mt-7 hidden sm:flex">
-        {ORDER_STEPS.map((step, index) => {
-          const Icon = step.icon;
+      <div className="mt-8 hidden sm:block">
+        <div className="relative px-2">
+          {/* Connecting line */}
+          <div className="absolute top-4 right-8 left-8 h-[2px] bg-[#E5E9E6]" />
 
-          const historyEntry = getHistoryEntry(step.status);
+          {/* Progress line */}
+          <div
+            className="absolute top-4 left-8 h-[2px] bg-[#FF5A5F] transition-all"
+            style={{
+              width:
+                history.length > 1
+                  ? `calc(${((history.length - 1) / (history.length - 1)) * 100}% - 64px)`
+                  : "0px",
+            }}
+          />
 
-          const completed = Boolean(historyEntry);
+          <div className="relative flex justify-between gap-4">
+            {history.map((item, index) => {
+              const isLast = index === history.length - 1;
 
-          const nextStep = ORDER_STEPS[index + 1];
+              const Icon = getTimelineIcon(item.status);
 
-          const nextCompleted = nextStep ? Boolean(getHistoryEntry(nextStep.status)) : false;
-
-          return (
-            <div key={step.status} className="flex flex-1 items-start last:flex-none">
-              <div className="flex flex-col items-center">
+              return (
                 <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border-2 ${
-                    completed
-                      ? "border-[#FF5A5F] bg-[#FF5A5F] text-white"
-                      : "border-[#E5E7EB] bg-white text-[#9CA3AF]"
-                  }`}
+                  key={`${item.status}-${item.timestamp}-${index}`}
+                  className="flex min-w-0 flex-1 flex-col items-center text-center"
                 >
-                  <Icon size={16} />
+                  {/* Icon */}
+                  <div
+                    className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      isLast ? "bg-[#FF5A5F] text-white" : "bg-[#FF5A5F] text-white"
+                    }`}
+                  >
+                    <Icon size={14} />
+                  </div>
+
+                  {/* Label */}
+                  <p className="mt-3 text-xs font-semibold text-[#242424]">
+                    {getTimelineLabel(item.status)}
+                  </p>
+
+                  {/* Date */}
+                  <p className="mt-1 text-[10px] whitespace-nowrap text-[#9CA3AF]">
+                    {formatTimelineDate(item.timestamp)}
+                  </p>
+
+                  {/* Current */}
+                  {isLast && (
+                    <span className="mt-2 rounded-full bg-[#FFF0F0] px-2 py-0.5 text-[9px] font-bold text-[#FF5A5F]">
+                      Current
+                    </span>
+                  )}
                 </div>
-
-                <span
-                  className={`mt-2 text-[10px] font-semibold whitespace-nowrap ${
-                    completed ? "text-[#242424]" : "text-[#9CA3AF]"
-                  }`}
-                >
-                  {step.label}
-                </span>
-
-                {historyEntry && (
-                  <span className="mt-1 max-w-[100px] text-center text-[9px] leading-4 text-[#9CA3AF]">
-                    {formatTimelineDate(historyEntry.timestamp)}
-                  </span>
-                )}
-              </div>
-
-              {index < ORDER_STEPS.length - 1 && (
-                <div
-                  className={`mt-4 h-[2px] flex-1 ${
-                    completed && nextCompleted ? "bg-[#FF5A5F]" : "bg-[#E5E7EB]"
-                  }`}
-                />
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Mobile */}
-      <div className="mt-6 sm:hidden">
-        {ORDER_STEPS.map((step, index) => {
-          const Icon = step.icon;
+      <div className="mt-7 sm:hidden">
+        {history.map((item, index) => {
+          const isLast = index === history.length - 1;
 
-          const historyEntry = getHistoryEntry(step.status);
-
-          const completed = Boolean(historyEntry);
-
-          const nextStep = ORDER_STEPS[index + 1];
-
-          const nextCompleted = nextStep ? Boolean(getHistoryEntry(nextStep.status)) : false;
+          const Icon = getTimelineIcon(item.status);
 
           return (
-            <div key={step.status} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                    completed
-                      ? "bg-[#FF5A5F] text-white"
-                      : "border border-[#E5E7EB] bg-white text-[#9CA3AF]"
-                  }`}
-                >
-                  <Icon size={14} />
-                </div>
+            <div key={`${item.status}-${item.timestamp}-${index}`} className="relative flex gap-4">
+              {!isLast && (
+                <div className="absolute top-8 bottom-0 left-[15px] w-[2px] bg-[#FF5A5F]/30" />
+              )}
 
-                {index < ORDER_STEPS.length - 1 && (
-                  <div
-                    className={`min-h-10 w-[2px] flex-1 ${
-                      completed && nextCompleted ? "bg-[#FF5A5F]" : "bg-[#E5E7EB]"
-                    }`}
-                  />
-                )}
+              <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF5A5F] text-white">
+                <Icon size={14} />
               </div>
 
-              <div className="min-h-16 pb-4">
-                <p
-                  className={`pt-1.5 text-sm ${
-                    completed ? "font-semibold text-[#242424]" : "text-[#9CA3AF]"
-                  }`}
-                >
-                  {step.label}
-                </p>
-
-                {historyEntry && (
-                  <p className="mt-1 text-[10px] text-[#9CA3AF]">
-                    {formatDateTime(historyEntry.timestamp)}
+              <div className={`min-w-0 flex-1 ${!isLast ? "pb-6" : ""}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#242424]">
+                    {getTimelineLabel(item.status)}
                   </p>
-                )}
+
+                  {isLast && (
+                    <span className="shrink-0 rounded-full bg-[#FFF0F0] px-2.5 py-1 text-[9px] font-bold text-[#FF5A5F]">
+                      Current
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-1 text-xs text-[#9CA3AF]">{formatDateTime(item.timestamp)}</p>
               </div>
             </div>
           );
         })}
       </div>
-    </section>
+    </>
   );
+}
+
+function getTimelineIcon(status) {
+  switch (status) {
+    case "PLACED":
+      return CheckCircle2;
+
+    case "CONFIRMED":
+      return Check;
+
+    case "PROCESSING":
+      return Box;
+
+    case "SHIPPED":
+      return Truck;
+
+    case "OUT_FOR_DELIVERY":
+      return Truck;
+
+    case "DELIVERED":
+      return Package;
+
+    case "RTO":
+      return Truck;
+
+    case "CANCELLED":
+      return XCircle;
+
+    default:
+      return Clock3;
+  }
+}
+
+function getTimelineLabel(status) {
+  const labels = {
+    PLACED: "Order Placed",
+    CONFIRMED: "Order Confirmed",
+    PROCESSING: "Processing",
+    SHIPPED: "Shipped",
+    OUT_FOR_DELIVERY: "Out for Delivery",
+    DELIVERED: "Delivered",
+    RTO: "Return to Seller",
+    CANCELLED: "Order Cancelled",
+  };
+
+  return labels[status] || formatStatus(status);
 }
 
 function OrderProducts({ items, onReviewUpdated }) {

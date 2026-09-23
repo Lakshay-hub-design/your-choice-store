@@ -1,21 +1,24 @@
 import cron from "node-cron";
 
 import expirePendingOnlinePayments from "../services/paymentExpiry.service.js";
+import logger from "../utils/logger.js";
 
 const startPaymentExpiryJob = () => {
-  cron.schedule("* * * * *", async () => {
+  const task = cron.schedule("* * * * *", async () => {
     try {
       const result = await expirePendingOnlinePayments();
 
       if (result.processed > 0) {
-        console.log(`Payment expiry job processed ${result.processed} order(s).`);
+        logger.info(`Payment expiry job processed ${result.processed} order(s).`);
       }
     } catch (error) {
-      console.error("Payment expiry job failed:", error);
+      logger.error("Payment expiry job failed:", error);
     }
   });
 
-  console.log("Payment expiry job started.");
+  logger.info("Payment expiry job started.");
+
+  return task;
 };
 
 export default startPaymentExpiryJob;

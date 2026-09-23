@@ -173,6 +173,55 @@ const refundSchema = new mongoose.Schema(
   }
 );
 
+const returnAddressSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    addressLine1: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    addressLine2: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    state: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    postalCode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const returnRequestSchema = new mongoose.Schema(
   {
     returnNumber: {
@@ -248,6 +297,11 @@ const returnRequestSchema = new mongoose.Schema(
       default: "",
       trim: true,
       maxlength: 2000,
+    },
+
+    returnAddress: {
+      type: returnAddressSchema,
+      default: null,
     },
 
     returnShipment: {

@@ -1,10 +1,26 @@
 import axios from "axios";
+
 import useAuthStore from "@/store/authStore";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
 });
+
+const isAuthEndpoint = (url = "") => {
+  const authEndpoints = [
+    "/auth/login",
+    "/auth/register",
+    "/auth/verify-email",
+    "/auth/resend-verification",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+    "/auth/refresh-token",
+    "/auth/logout",
+  ];
+
+  return authEndpoints.some((endpoint) => url.includes(endpoint));
+};
 
 api.interceptors.request.use(
   (config) => {
@@ -29,8 +45,9 @@ api.interceptors.response.use(
 
     if (
       error.response?.status === 401 &&
-      !originalRequest?._retry &&
-      !originalRequest?.url?.includes("/auth/refresh-token")
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
     ) {
       originalRequest._retry = true;
 

@@ -20,8 +20,7 @@ export default function ReturnSection({ order, onUpdated }) {
   const returnRequest = order?.returnRequest || null;
 
   const returnStatus = returnRequest?.status || null;
-  console.log("RETURN REQUEST:", returnRequest);
-  console.log("RETURN STATUS:", returnStatus);
+
   /*
    * Return can only be initiated after
    * the order has been delivered.
@@ -97,6 +96,7 @@ export default function ReturnSection({ order, onUpdated }) {
       {returnStatus === "APPROVED" && (
         <ReturnShippingForm
           returnId={returnRequest._id}
+          returnAddress={returnRequest.returnAddress}
           onSuccess={async () => {
             await onUpdated?.();
           }}

@@ -1,4 +1,4 @@
-import express, { urlencoded } from "express";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
@@ -6,16 +6,78 @@ import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
+
 import webhookRoutes from "./routes/webhook.route.js";
+
+import notFound from "./middlewares/notFound.js";
+import errorMiddleware from "./middlewares/errorMiddleware.js";
+
+import categoryRoutes from "./routes/category.routes.js";
+import productRoutes from "./routes/product.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import addressRoutes from "./routes/address.routes.js";
+import cartRoutes from "./routes/cart.routes.js";
+import wishlistRoutes from "./routes/wishlist.routes.js";
+import checkoutRoutes from "./routes/checkout.routes.js";
+import orderRoutes from "./routes/order.routes.js";
+import returnRoutes from "./routes/return.routes.js";
+import reviewRoutes from "./routes/review.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
+import shippingRoutes from "./features/shipping/shipping.routes.js";
+
+import adminProductRoutes from "./routes/admin/product.routes.js";
+import adminOrderRoutes from "./routes/admin/order.routes.js";
+import adminDashboardRoutes from "./routes/admin/adminDashboard.routes.js";
+import customerRoutes from "./routes/admin/customer.routes.js";
+import adminCategoryRoutes from "./routes/admin/adminCategoryRoutes.js";
+import adminReturnRoutes from "./routes/admin/return.routes.js";
 
 const app = express();
 
+/*
+|--------------------------------------------------------------------------
+| Security
+|--------------------------------------------------------------------------
+*/
+
 app.use(helmet());
+app.use(hpp());
+
+/*
+|--------------------------------------------------------------------------
+| CORS
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  })
+);
+
+/*
+|--------------------------------------------------------------------------
+| Compression
+|--------------------------------------------------------------------------
+*/
 
 app.use(compression());
 
+/*
+|--------------------------------------------------------------------------
+| Logging
+|--------------------------------------------------------------------------
+*/
+
 app.use(morgan("dev"));
-app.use(hpp());
+
+/*
+|--------------------------------------------------------------------------
+| Rate Limiting
+|--------------------------------------------------------------------------
+*/
+
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -29,48 +91,58 @@ app.use(
   })
 );
 
+/*
+|--------------------------------------------------------------------------
+| Webhooks
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| Webhook routes must be registered before express.json()
+| because Razorpay signature verification requires the raw body.
+|
+*/
+
 app.use("/api/webhooks", webhookRoutes);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+/*
+|--------------------------------------------------------------------------
+| Body Parsers
+|--------------------------------------------------------------------------
+*/
+
+app.use(
+  express.json({
+    limit: "1mb",
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "1mb",
+  })
+);
 
 app.use(cookieParser());
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL,
-    credentials: true,
-  })
-);
+/*
+|--------------------------------------------------------------------------
+| Health Check
+|--------------------------------------------------------------------------
+*/
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Server is running 🚀",
+    message: "Server is running",
   });
 });
 
-import notFound from "./middlewares/notFound.js";
-import errorMiddleware from "./middlewares/errorMiddleware.js";
-import categoryRoutes from "./routes/category.routes.js";
-import productRoutes from "./routes/product.routes.js";
-import authRoutes from "./routes/auth.routes.js";
-import addressRoutes from "./routes/address.routes.js";
-import cartRoutes from "./routes/cart.routes.js";
-import wishlistRoutes from "./routes/wishlist.routes.js";
-import checkoutRoutes from "./routes/checkout.routes.js";
-import orderRoutes from "./routes/order.routes.js";
-import returnRoutes from "./routes/return.routes.js";
-
-import adminProductRoutes from "./routes/admin/product.routes.js";
-import adminOrderRoutes from "./routes/admin/order.routes.js";
-import adminDashboardRoutes from "./routes/admin/adminDashboard.routes.js";
-import customerRoutes from "./routes/admin/customer.routes.js";
-import adminCategoryRoutes from "./routes/admin/adminCategoryRoutes.js";
-import reviewRoutes from "./routes/review.routes.js";
-import notificationRoutes from "./routes/notification.routes.js";
-import adminReturnRoutes from "./routes/admin/return.routes.js";
-import shippingRoutes from "./features/shipping/shipping.routes.js";
+/*
+|--------------------------------------------------------------------------
+| Customer Routes
+|--------------------------------------------------------------------------
+*/
 
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
@@ -85,12 +157,24 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/shipping", shippingRoutes);
 
+/*
+|--------------------------------------------------------------------------
+| Admin Routes
+|--------------------------------------------------------------------------
+*/
+
 app.use("/api/admin/categories", adminCategoryRoutes);
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/admin/dashboard", adminDashboardRoutes);
 app.use("/api/admin/customers", customerRoutes);
 app.use("/api/admin/returns", adminReturnRoutes);
+
+/*
+|--------------------------------------------------------------------------
+| Error Handling
+|--------------------------------------------------------------------------
+*/
 
 app.use(notFound);
 app.use(errorMiddleware);
