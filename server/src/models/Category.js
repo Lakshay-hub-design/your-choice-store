@@ -25,7 +25,10 @@ const categorySchema = new mongoose.Schema(
       maxlength: 500,
     },
 
-    image: imageSchema,
+    image: {
+      type: imageSchema,
+      default: undefined,
+    },
 
     parentCategory: {
       type: mongoose.Schema.Types.ObjectId,
@@ -80,14 +83,6 @@ const categorySchema = new mongoose.Schema(
     },
   }
 );
-
-categorySchema.index({
-  slug: 1,
-});
-
-categorySchema.index({
-  name: 1,
-});
 
 categorySchema.index({
   isActive: 1,

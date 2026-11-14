@@ -21,12 +21,13 @@ const validate = (schema) => {
 
       next();
     } catch (error) {
-      console.error("VALIDATION ERROR:", error.issues);
-      next(
-        new ApiError(400, "Validation failed", {
-          details: error.issues || [],
-        })
-      );
+      console.error("Validation error:", error);
+
+      return res.status(400).json({
+        success: false,
+        message: error.issues?.[0]?.message || "Validation failed",
+        errors: error.issues || [],
+      });
     }
   };
 };

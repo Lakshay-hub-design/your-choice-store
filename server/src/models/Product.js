@@ -38,6 +38,14 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
+    productType: {
+      type: String,
+      enum: ["gift", "toy"],
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+
     sku: {
       type: String,
       required: true,

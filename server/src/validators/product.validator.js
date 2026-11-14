@@ -29,6 +29,10 @@ export const createProductSchema = z.object({
 
     category: z.string().trim().min(1, "Category is required"),
 
+    productType: z.enum(["gift", "toy"], {
+      error: "Please select whether this product is a Gift or Toy.",
+    }),
+
     sku: z.string().trim().min(3).max(50),
 
     price: z.coerce.number().min(0),
@@ -109,6 +113,8 @@ export const updateProductSchema = z.object({
         .optional(),
 
       category: z.string().trim().min(1, "Category is required").optional(),
+
+      productType: z.enum(["gift", "toy"]).optional(),
 
       sku: z.string().trim().min(3, "SKU must be at least 3 characters").max(50).optional(),
 

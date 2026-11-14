@@ -3,9 +3,6 @@ import ApiResponse from "../utils/ApiResponse.js";
 import categoryService from "../services/category.service.js";
 
 const createCategory = asyncHandler(async (req, res) => {
-  if (req.body.seo) {
-    req.body.seo = JSON.parse(req.body.seo);
-  }
   const category = await categoryService.createCategory(req.body, req.file);
 
   return res.status(201).json(new ApiResponse(201, "Category created successfully", category));
@@ -18,7 +15,7 @@ const getActiveCategories = asyncHandler(async (req, res) => {
 });
 
 const getCategoryById = asyncHandler(async (req, res) => {
-  const category = await categoryService.getCategoryById(req.params.id);
+  const category = await categoryService.getPublicCategoryById(req.params.id);
 
   return res.status(200).json(new ApiResponse(200, "Category fetched successfully", category));
 });
@@ -30,9 +27,6 @@ const getCategoryBySlug = asyncHandler(async (req, res) => {
 });
 
 const updateCategory = asyncHandler(async (req, res) => {
-  if (req.body.seo) {
-    req.body.seo = JSON.parse(req.body.seo);
-  }
   const category = await categoryService.updateCategory(req.params.id, req.body, req.file);
 
   return res.status(200).json(new ApiResponse(200, "Category updated successfully", category));

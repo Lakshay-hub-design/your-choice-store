@@ -95,7 +95,7 @@ const verifyEmail = async (token) => {
 const VERIFICATION_EMAIL_COOLDOWN = 30 * 1000;
 
 const resendVerificationEmail = async (email) => {
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
 
   if (!user) {
     throw new ApiError(404, "User not found");

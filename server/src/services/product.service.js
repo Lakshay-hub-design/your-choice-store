@@ -74,6 +74,9 @@ const getAllProducts = async (query) => {
     limit = 12,
     search,
     category,
+    type,
+    personalized,
+    offers,
     minPrice,
     maxPrice,
     featured,
@@ -117,11 +120,16 @@ const getAllProducts = async (query) => {
     ];
   }
 
-  // Category slug
+  // Category filter (MongoDB ObjectId)
   if (category) {
+    if (!mongoose.Types.ObjectId.isValid(category)) {
+      throw new ApiError(400, "Invalid category ID.");
+    }
+
     const categoryDoc = await Category.findOne({
-      slug: category,
+      _id: category,
       isActive: true,
+      isArchived: { $ne: true },
     }).select("_id");
 
     if (!categoryDoc) {
@@ -139,6 +147,31 @@ const getAllProducts = async (query) => {
     }
 
     filter.category = categoryDoc._id;
+  }
+
+  // Product type: Gifts or Toys
+  if (type) {
+    const normalizedType = String(type).toLowerCase();
+
+    if (!["gift", "toy"].includes(normalizedType)) {
+      throw new ApiError(400, "Invalid product type.");
+    }
+
+    filter.productType = normalizedType;
+  }
+
+  // Personalized products
+  if (personalized === "true") {
+    filter["customization.enabled"] = true;
+  }
+
+  // Products currently on offer
+  if (offers === "true") {
+    filter.comparePrice = { $gt: 0 };
+
+    filter.$expr = {
+      $gt: ["$comparePrice", "$price"],
+    };
   }
 
   // Price

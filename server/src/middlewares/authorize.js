@@ -10,7 +10,7 @@ const authorize = (...roles) => {
       throw new ApiError(403, "You are not authorized to perform this action");
     }
 
-    next();
+    return next();
   };
 };
 

@@ -4,10 +4,10 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { verifyAccessToken } from "../utils/token.js";
 
 const authenticate = asyncHandler(async (req, res, next) => {
-  const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+  const token = req.header("Authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!token) {
-    throw new ApiError(401, "Unauthorize request");
+    throw new ApiError(401, "Unauthorized request");
   }
 
   let decoded;
