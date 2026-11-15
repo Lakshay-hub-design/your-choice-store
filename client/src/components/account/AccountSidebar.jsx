@@ -9,6 +9,7 @@ import useLogout from "@/features/auth/hooks/useLogout";
 
 import { accountLinks } from "@/constants/accountLinks";
 import Avatar, { getInitials } from "@/components/account/Avatar";
+import Image from "next/image";
 
 export default function AccountSidebar() {
   const pathname = usePathname();
@@ -21,16 +22,37 @@ export default function AccountSidebar() {
 
   return (
     <aside className="sticky top-28 hidden w-[270px] shrink-0 lg:block">
-      {/* Profile Card */}
-      <div className="rounded-2xl border border-[#EDE9E6] bg-white p-6 text-center shadow-sm">
+      {/* Clickable Profile Card */}
+      <Link
+        href="/account/edit"
+        aria-label="Edit your profile"
+        className="group block rounded-2xl border border-[#EDE9E6] bg-white p-6 text-center shadow-sm transition hover:border-[#FF5A5F]/40 hover:shadow-md"
+      >
         <div className="flex justify-center">
-          <Avatar initials={initials} />
+          {user?.avatar?.url ? (
+            <Image
+              src={user.avatar.url}
+              alt={`${user?.fullName || "Customer"}'s profile picture`}
+              width={56}
+              height={56}
+              className="h-14 w-14 shrink-0 rounded-full border border-[#EDE9E6] object-cover"
+              unoptimized
+            />
+          ) : (
+            <Avatar initials={initials} size="small" />
+          )}
         </div>
 
-        <h2 className="mt-4 font-semibold text-[#242424]">{user?.fullName || "Customer"}</h2>
+        <h2 className="mt-4 font-semibold text-[#242424] transition group-hover:text-[#FF5A5F]">
+          {user?.fullName || "Customer"}
+        </h2>
 
         <p className="mt-1 truncate text-xs text-[#6B7280]">{user?.email || user?.phone}</p>
-      </div>
+
+        <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#FF5A5F] opacity-0 transition group-hover:opacity-100">
+          Edit Profile
+        </span>
+      </Link>
 
       {/* Navigation */}
       <div className="mt-5 overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white p-3 shadow-sm">

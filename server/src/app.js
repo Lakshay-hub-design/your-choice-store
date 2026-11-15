@@ -24,6 +24,7 @@ import returnRoutes from "./routes/return.routes.js";
 import reviewRoutes from "./routes/review.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import shippingRoutes from "./features/shipping/shipping.routes.js";
+import accountRoutes from "./routes/account.routes.js";
 
 import adminProductRoutes from "./routes/admin/product.routes.js";
 import adminOrderRoutes from "./routes/admin/order.routes.js";
@@ -156,6 +157,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/shipping", shippingRoutes);
+app.use("/api/account", accountRoutes);
 
 /*
 |--------------------------------------------------------------------------
