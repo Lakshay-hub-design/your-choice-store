@@ -54,7 +54,7 @@ export default async function HomePage() {
           title="Best Sellers"
           description="Our most loved gifts and toys."
           products={bestSellers}
-          href="/products?sort=best"
+          href="/products?sort=best_selling"
         />
 
         <ProductSection

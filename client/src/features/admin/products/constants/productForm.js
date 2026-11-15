@@ -3,6 +3,7 @@ export const INITIAL_PRODUCT_FORM = {
   shortDescription: "",
   description: "",
   category: "",
+  productType: "",
   sku: "",
 
   price: "",
@@ -16,7 +17,6 @@ export const INITIAL_PRODUCT_FORM = {
 
   /*
    * Shipping Information
-   *
    * Weight: kg
    * Dimensions: cm
    */
@@ -54,6 +54,9 @@ export const productToForm = (product) => {
 
     category: product?.category?._id || product?.category || "",
 
+    // Product classification
+    productType: product?.productType || "",
+
     sku: product?.sku || "",
 
     price: product?.price !== undefined ? String(product.price) : "",
@@ -71,12 +74,6 @@ export const productToForm = (product) => {
 
     /*
      * Shipping Information
-     *
-     * Convert numbers to strings because
-     * form inputs use string values.
-     *
-     * Defaults also support older products
-     * that don't have shipping information.
      */
     shipping: {
       weight: product?.shipping?.weight !== undefined ? String(product.shipping.weight) : "",

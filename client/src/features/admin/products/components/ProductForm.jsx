@@ -189,6 +189,10 @@ export default function ProductForm({
       return "Please select a category.";
     }
 
+    if (!["gift", "toy"].includes(form.productType)) {
+      return "Please select a product type.";
+    }
+
     if (!form.sku.trim()) {
       return "SKU is required.";
     }

@@ -47,7 +47,7 @@ const sections = [
       },
       {
         label: "Wishlist",
-        href: "/wishlist",
+        href: "/account/wishlist",
       },
       {
         label: "Track Order",
@@ -175,19 +175,19 @@ export default function FooterAccordion() {
           <div className="flex gap-3">
             <MapPin size={18} className="mt-0.5 shrink-0 text-[#FF5A5F]" />
 
-            <span>Jaipur, Rajasthan, India</span>
+            <span>Ajmer, Rajasthan, India</span>
           </div>
 
           <div className="flex gap-3">
             <Phone size={18} className="text-[#FF5A5F]" />
 
-            <span>+91 XXXXX XXXXX</span>
+            <span>+91 97724 23079</span>
           </div>
 
           <div className="flex gap-3">
             <Mail size={18} className="text-[#FF5A5F]" />
 
-            <span>support@ycgifts.com</span>
+            <span>theyourchoicegifts@gmail.com</span>
           </div>
         </div>
       </div>

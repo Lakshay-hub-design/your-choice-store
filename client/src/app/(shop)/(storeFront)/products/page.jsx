@@ -19,6 +19,12 @@ export default async function ProductsPage({ searchParams }) {
 
     category: params.category || "",
 
+    type: params.type || "",
+
+    personalized: params.personalized || "",
+
+    offers: params.offers || "",
+
     search: params.search || "",
 
     sort: params.sort || "newest",
@@ -66,6 +72,9 @@ export default async function ProductsPage({ searchParams }) {
   const hasFilters = Boolean(
     filters.search ||
     filters.category ||
+    filters.type ||
+    filters.personalized ||
+    filters.offers ||
     filters.minPrice ||
     filters.maxPrice ||
     filters.inStock ||

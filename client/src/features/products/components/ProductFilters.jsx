@@ -12,6 +12,10 @@ export default function ProductFilters({ categories = [], onFilterApplied }) {
 
   const selectedCategory = searchParams.get("category") || "";
 
+  const selectedType = searchParams.get("type") || "";
+  const personalized = searchParams.get("personalized") === "true";
+  const offers = searchParams.get("offers") === "true";
+
   const urlMinPrice = searchParams.get("minPrice") || "";
 
   const urlMaxPrice = searchParams.get("maxPrice") || "";
@@ -102,6 +106,9 @@ export default function ProductFilters({ categories = [], onFilterApplied }) {
     const params = new URLSearchParams(searchParams.toString());
 
     params.delete("category");
+    params.delete("type");
+    params.delete("personalized");
+    params.delete("offers");
     params.delete("minPrice");
     params.delete("maxPrice");
     params.delete("inStock");
@@ -166,6 +173,51 @@ export default function ProductFilters({ categories = [], onFilterApplied }) {
             <span className="text-sm text-[#6B7280]">{category.name}</span>
           </label>
         ))}
+      </FilterSection>
+
+      {/* Product Type */}
+
+      <FilterSection title="Product Type">
+        {[
+          { label: "All Types", value: "" },
+          { label: "Gifts", value: "gift" },
+          { label: "Toys", value: "toy" },
+        ].map((item) => (
+          <label key={item.value || "all"} className="flex cursor-pointer items-center gap-2.5">
+            <input
+              type="radio"
+              name="productType"
+              checked={selectedType === item.value}
+              onChange={() => updateFilter("type", item.value)}
+              className="accent-[#FF5A5F]"
+            />
+            <span className="text-sm text-[#6B7280]">{item.label}</span>
+          </label>
+        ))}
+      </FilterSection>
+
+      {/* Special Filters */}
+
+      <FilterSection title="Special Filters">
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={personalized}
+            onChange={(event) => updateFilter("personalized", event.target.checked ? "true" : "")}
+            className="accent-[#FF5A5F]"
+          />
+          <span className="text-sm text-[#6B7280]">Personalized Products</span>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={offers}
+            onChange={(event) => updateFilter("offers", event.target.checked ? "true" : "")}
+            className="accent-[#FF5A5F]"
+          />
+          <span className="text-sm text-[#6B7280]">On Sale</span>
+        </label>
       </FilterSection>
 
       {/* Price */}

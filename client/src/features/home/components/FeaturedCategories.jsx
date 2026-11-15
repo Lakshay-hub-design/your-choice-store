@@ -29,7 +29,7 @@ function CategoryCard({ category }) {
 
   return (
     <Link
-      href={`/products?category=${category.slug}`}
+      href={`/products?category=${encodeURIComponent(category._id)}`}
       className="group relative block overflow-hidden rounded-2xl border border-[#EDE9E6] bg-white"
       style={{ aspectRatio: "4 / 5" }}
     >

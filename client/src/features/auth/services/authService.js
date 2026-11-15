@@ -13,7 +13,7 @@ export const verifyEmail = async (token) => {
 };
 
 export const resendVerificationEmail = async (email) => {
-  const response = await api.post("/auth/resend-verification", {
+  const response = await api.post("/auth/resend-verification-email", {
     email,
   });
 

@@ -13,12 +13,12 @@ const benefits = [
     icon: ShieldCheck,
     iconClass: "text-green-600 bg-green-50",
   },
-  {
-    title: "Easy Returns",
-    description: "7 days return policy",
-    icon: RotateCcw,
-    iconClass: "text-orange-500 bg-orange-50",
-  },
+  // {
+  //   title: "Easy Returns",
+  //   description: "7 days return policy",
+  //   icon: RotateCcw,
+  //   iconClass: "text-orange-500 bg-orange-50",
+  // },
   {
     title: "Top Quality",
     description: "Premium products",
@@ -29,8 +29,8 @@ const benefits = [
 
 export default function TrustBenefits() {
   return (
-    <section className="border-x border-b border-[#EDE9E6] bg-white">
-      <div className="grid grid-cols-2 divide-x divide-y divide-[#EDE9E6] md:grid-cols-4 md:divide-y-0">
+    <section className="mt-4 rounded-2xl border-x border-b border-[#EDE9E6] bg-white">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[#EDE9E6] md:grid-cols-3 md:divide-y-0">
         {benefits.map((benefit) => {
           const Icon = benefit.icon;
 

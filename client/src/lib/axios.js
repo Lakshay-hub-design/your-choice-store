@@ -1,27 +1,60 @@
 import axios from "axios";
-
 import useAuthStore from "@/store/authStore";
 
+const baseURL = process.env.NEXT_PUBLIC_API_URL;
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL,
   withCredentials: true,
 });
 
-const isAuthEndpoint = (url = "") => {
-  const authEndpoints = [
-    "/auth/login",
-    "/auth/register",
-    "/auth/verify-email",
-    "/auth/resend-verification",
-    "/auth/forgot-password",
-    "/auth/reset-password",
-    "/auth/refresh-token",
-    "/auth/logout",
-  ];
+// Separate instance: refresh requests must not pass through
+// the main response interceptor.
+const refreshApi = axios.create({
+  baseURL,
+  withCredentials: true,
+});
 
-  return authEndpoints.some((endpoint) => url.includes(endpoint));
+// Shared promise prevents multiple simultaneous refresh requests.
+let refreshPromise = null;
+
+const authEndpoints = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/verify-email",
+  "/auth/resend-verification-email",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/refresh-token",
+  "/auth/logout",
+];
+
+const isAuthEndpoint = (url = "") => {
+  const pathname = url.split("?")[0].replace(/\/+$/, "");
+
+  return authEndpoints.some((endpoint) => pathname.endsWith(endpoint));
 };
 
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = refreshApi
+      .post("/auth/refresh-token")
+      .then((response) => {
+        const newAccessToken = response.data.data.accessToken;
+
+        useAuthStore.getState().setAccessToken(newAccessToken);
+
+        return newAccessToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+};
+
+// Attach access token to outgoing requests.
 api.interceptors.request.use(
   (config) => {
     const accessToken = useAuthStore.getState().accessToken;
@@ -32,11 +65,10 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
+// Handle expired access tokens.
 api.interceptors.response.use(
   (response) => response,
 
@@ -52,14 +84,9 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const response = await api.post("/auth/refresh-token");
-
-        const newAccessToken = response.data.data.accessToken;
-
-        useAuthStore.getState().setAccessToken(newAccessToken);
+        const newAccessToken = await refreshAccessToken();
 
         originalRequest.headers = originalRequest.headers || {};
-
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
         return api(originalRequest);

@@ -6,9 +6,11 @@ import Footer from "@/components/storefront/footer/Footer";
 export default function CartLayout({ children }) {
   return (
     <div className="min-h-screen bg-[#FFF9F5]">
-      <AnnouncementBar />
+      <header className="sticky top-0 z-50 bg-white">
+        <AnnouncementBar />
 
-      <Navbar showCategoryDropdown={false} />
+        <Navbar showCategoryDropdown={false} />
+      </header>
 
       <main className="pb-20 lg:pb-0">{children}</main>
 

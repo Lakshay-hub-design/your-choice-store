@@ -2,6 +2,7 @@ import FooterColumn from "./FooterColumn";
 import FooterFeatureBar from "./FooterFeatureBar";
 import FooterBottom from "./FooterBottom";
 import FooterAccordion from "./FooterAccordion";
+import Image from "next/image";
 
 import { STORE } from "@/config/store";
 
@@ -23,9 +24,15 @@ export default function Footer() {
 
           <div>
             <Link href="/" className="inline-flex items-center gap-2">
-              <span className="rounded-xl bg-[#FF5A5F] px-3 py-2 text-lg font-bold text-white">
-                YC
-              </span>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF5A5F]/10 text-xl">
+                <Image
+                  src="/images/logo.png"
+                  alt="YC Gifts & Toys Logo"
+                  width={24}
+                  height={24}
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
 
               <div>
                 <p className="text-lg font-bold text-[#242424]">{STORE.name}</p>
@@ -37,16 +44,16 @@ export default function Footer() {
             <p className="mt-5 max-w-sm text-sm leading-7 text-[#6B7280]">{STORE.description}</p>
 
             <div className="mt-6 flex items-center gap-4">
-              <SocialIcon href="#">
+              <SocialIcon href={STORE.social.facebook} label="Facebook">
                 <FaFacebook size={18} />
               </SocialIcon>
 
-              <SocialIcon href="#">
+              <SocialIcon href={STORE.social.instagram} label="Instagram">
                 <FaInstagram size={18} />
               </SocialIcon>
 
-              <SocialIcon href="#">
-                <Phone size={18} />
+              <SocialIcon href={`mailto:${STORE.email}`} label="Email">
+                <Mail size={18} />
               </SocialIcon>
             </div>
           </div>
@@ -158,13 +165,16 @@ export default function Footer() {
   );
 }
 
-function SocialIcon({ href, children }) {
+function SocialIcon({ href, children, label }) {
   return (
-    <Link
+    <a
       href={href}
+      aria-label={label}
+      target={href.startsWith("mailto:") ? undefined : "_blank"}
+      rel={href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
       className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E5E7EB] text-[#6B7280] transition hover:border-[#FF5A5F] hover:bg-[#FF5A5F] hover:text-white"
     >
       {children}
-    </Link>
+    </a>
   );
 }

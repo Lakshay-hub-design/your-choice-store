@@ -13,8 +13,8 @@ export const STORE = {
   address: "Ajmer, Rajasthan, India",
 
   social: {
-    facebook: "#",
-    instagram: "#",
+    facebook: "https://www.facebook.com/profile.php?id=61596743272752",
+    instagram: "https://www.instagram.com/ycgiftsandtoys/",
     whatsapp: "#",
   },
 };

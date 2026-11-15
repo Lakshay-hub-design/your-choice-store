@@ -9,6 +9,8 @@ export const buildProductFormData = ({ form, images = [], removedImages = [] }) 
 
   data.append("category", form.category);
 
+  data.append("productType", form.productType);
+
   data.append("sku", form.sku.trim());
 
   data.append("price", String(Number(form.price)));

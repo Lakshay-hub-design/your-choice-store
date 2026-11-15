@@ -20,7 +20,7 @@ export default function AccountSidebar() {
   const initials = getInitials(user?.fullName);
 
   return (
-    <aside className="hidden w-[270px] shrink-0 lg:block">
+    <aside className="sticky top-28 hidden w-[270px] shrink-0 lg:block">
       {/* Profile Card */}
       <div className="rounded-2xl border border-[#EDE9E6] bg-white p-6 text-center shadow-sm">
         <div className="flex justify-center">
