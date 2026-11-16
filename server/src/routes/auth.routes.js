@@ -10,6 +10,8 @@ import {
   getCurrentUser,
   forgotPassword,
   resetPassword,
+  changePassword,
+  updateProfile,
 } from "../controllers/auth.controller.js";
 
 import {
@@ -18,8 +20,12 @@ import {
   resendVerificationEmailSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  updateProfileSchema,
+  changePasswordSchema,
 } from "../validators/auth.validator.js";
 import authenticate from "../middlewares/authenticate.js";
+
+import { avatarUpload } from "../middlewares/upload.js";
 
 const router = express.Router();
 
@@ -43,6 +49,16 @@ router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 
+router.patch("/change-password", authenticate, validate(changePasswordSchema), changePassword);
+
 router.get("/me", authenticate, getCurrentUser);
+
+router.patch(
+  "/profile",
+  authenticate,
+  avatarUpload.single("avatar"),
+  validate(updateProfileSchema),
+  updateProfile
+);
 
 export default router;

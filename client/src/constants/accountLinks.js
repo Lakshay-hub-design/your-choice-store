@@ -23,7 +23,7 @@ export const accountLinks = [
   },
   {
     name: "Password Manager",
-    href: "/account/change-password",
+    href: "/account/password",
     icon: KeyRound,
   },
 ];

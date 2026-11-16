@@ -1,9 +1,10 @@
 import User from "../models/User.js";
 import ApiError from "../utils/ApiError.js";
-import mongoose from "mongoose";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/token.js";
 import { generateRandomToken, hashToken } from "../utils/crypto.js";
 import emailService from "./email.service.js";
+import logger from "../utils/logger.js";
+import { uploadImage, deleteImages } from "../services/image.service.js";
 
 const findUserByEmail = async (email) => {
   return await User.findOne({
@@ -120,9 +121,9 @@ const resendVerificationEmail = async (email) => {
     );
   }
 
-  const { token, hashToken, expiresAt } = createVerificationToken();
+  const { token, hashedToken, expiresAt } = createVerificationToken();
 
-  user.verificationToken = hashToken;
+  user.verificationToken = hashedToken;
   user.verificationTokenExpires = expiresAt;
   user.lastVerificationEmailSentAt = new Date();
 
@@ -299,6 +300,109 @@ const getCurrentUser = async (userId) => {
   return user;
 };
 
+const changePassword = async (userId, { currentPassword, newPassword }) => {
+  const user = await User.findById(userId).select("+password +refreshToken");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Supports future Google-only accounts.
+  if (!user.password) {
+    throw new ApiError(
+      400,
+      "This account does not have a password. Please use your connected sign-in method."
+    );
+  }
+
+  const isPasswordCorrect = await user.comparePassword(currentPassword);
+
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Current password is incorrect.");
+  }
+
+  // Prevent using the existing password again.
+  const isSamePassword = await user.comparePassword(newPassword);
+
+  if (isSamePassword) {
+    throw new ApiError(400, "Your new password must be different from your current password.");
+  }
+
+  user.password = newPassword;
+  user.passwordChangedAt = new Date();
+
+  // Invalidate the existing refresh token.
+  user.refreshToken = "";
+
+  await user.save();
+
+  return {
+    message: "Password changed successfully. Please log in again.",
+  };
+};
+
+const updateProfile = async (userId, profileData, file) => {
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const { fullName, phone } = profileData;
+
+  if (fullName !== undefined) {
+    user.fullName = fullName;
+  }
+
+  if (phone !== undefined) {
+    if (phone === "") {
+      user.phone = undefined;
+    } else {
+      const existingPhone = await User.findOne({
+        phone,
+        _id: { $ne: userId },
+      });
+
+      if (existingPhone) {
+        throw new ApiError(409, "Phone number already registered");
+      }
+
+      user.phone = phone;
+    }
+  }
+
+  let uploadedImage = null;
+  const oldFileId = user.avatar?.fileId;
+
+  // Upload new profile picture if provided
+  if (file) {
+    uploadedImage = await uploadImage(file, "/avatars");
+
+    user.avatar = {
+      fileId: uploadedImage.fileId,
+      url: uploadedImage.url,
+    };
+  }
+
+  try {
+    await user.save();
+  } catch (error) {
+    // Remove newly uploaded image if database save fails
+    if (uploadedImage?.fileId) {
+      await deleteImages([uploadedImage.fileId]);
+    }
+
+    throw error;
+  }
+
+  // Delete previous profile picture after successful save
+  if (uploadedImage && oldFileId) {
+    await deleteImages([oldFileId]);
+  }
+
+  return user;
+};
+
 const authService = {
   registerCustomer,
   verifyEmail,
@@ -307,8 +411,10 @@ const authService = {
   logout,
   refreshAccessToken,
   getCurrentUser,
+  updateProfile,
   forgotPassword,
   resetPassword,
+  changePassword,
 };
 
 export default authService;

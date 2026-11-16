@@ -79,6 +79,21 @@ const resetPassword = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result.message, null));
 });
 
+const changePassword = asyncHandler(async (req, res) => {
+  const result = await authService.changePassword(req.user._id, req.body);
+
+  // Clear the old refresh-token cookie.
+  res.clearCookie("refreshToken", refreshTokenCookieOptions);
+
+  return res.status(200).json(new ApiResponse(200, result.message, null));
+});
+
+const updateProfile = asyncHandler(async (req, res) => {
+  const user = await authService.updateProfile(req.user._id, req.body, req.file);
+
+  return res.status(200).json(new ApiResponse(200, "Profile updated successfully", user));
+});
+
 export {
   registerCustomer,
   verifyEmail,
@@ -89,4 +104,6 @@ export {
   getCurrentUser,
   forgotPassword,
   resetPassword,
+  updateProfile,
+  changePassword,
 };
