@@ -14,7 +14,7 @@ import authorize from "../../middlewares/authorize.js";
 import { USER_ROLES } from "../../constants/roles.js";
 
 import validate from "../../middlewares/validate.js";
-import upload from "../../middlewares/upload.js";
+import { productUpload } from "../../middlewares/upload.js";
 
 import {
   createProductSchema,
@@ -29,9 +29,14 @@ router.use(authorize(USER_ROLES.ADMIN));
 
 router.get("/", getAdminProducts);
 
-router.post("/", upload.array("images", 8), validate(createProductSchema), createProduct);
+router.post("/", productUpload.array("images", 8), validate(createProductSchema), createProduct);
 
-router.patch("/:id", upload.array("images", 8), validate(updateProductSchema), updateProduct);
+router.patch(
+  "/:id",
+  productUpload.array("images", 8),
+  validate(updateProductSchema),
+  updateProduct
+);
 
 router.get("/:id", getAdminProductById);
 

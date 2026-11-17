@@ -1,5 +1,3 @@
-import ApiError from "../utils/ApiError.js";
-
 const validate = (schema) => {
   return async (req, res, next) => {
     try {
@@ -9,25 +7,21 @@ const validate = (schema) => {
         query: req.query,
       });
 
-      if (validatedData.body) {
+      if (validatedData.body !== undefined) {
         req.body = validatedData.body;
       }
 
-      if (validatedData.params) {
+      if (validatedData.params !== undefined) {
         req.params = validatedData.params;
       }
 
-      req.validatedQuery = validatedData.query;
+      if (validatedData.query !== undefined) {
+        req.validatedQuery = validatedData.query;
+      }
 
-      next();
+      return next();
     } catch (error) {
-      console.error("Validation error:", error);
-
-      return res.status(400).json({
-        success: false,
-        message: error.issues?.[0]?.message || "Validation failed",
-        errors: error.issues || [],
-      });
+      return next(error);
     }
   };
 };

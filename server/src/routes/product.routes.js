@@ -1,27 +1,20 @@
 import express from "express";
 
 import {
-  createProduct,
   getAllProducts,
   getProductBySlug,
-  updateProduct,
-  deleteProduct,
   getRelatedProducts,
 } from "../controllers/product.controller.js";
 
-import validate from "../middlewares/validate.js";
-import upload from "../middlewares/upload.js";
-
 const router = express.Router();
 
+// Public product listing
 router.get("/", getAllProducts);
 
+// Related products
 router.get("/:slug/related", getRelatedProducts);
 
+// Product details
 router.get("/slug/:slug", getProductBySlug);
-
-router.patch("/:id", upload.array("productImages", 8), updateProduct);
-
-router.delete("/:id", deleteProduct);
 
 export default router;

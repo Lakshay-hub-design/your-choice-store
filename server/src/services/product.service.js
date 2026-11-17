@@ -14,14 +14,19 @@ const findProductById = async (id) => {
   return product;
 };
 
-const escapeRegex = (value) => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value = "") => {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const availableStockExpression = {
+  $subtract: ["$stock", { $ifNull: ["$reservedStock", 0] }],
 };
 
 const createProduct = async (productData, files) => {
   const existingProduct = await Product.findOne({
     name: {
-      $regex: new RegExp(`^${productData.name}$`, "i"),
+      $regex: `^${escapeRegex(productData.name.trim())}$`,
+      $options: "i",
     },
   });
 
@@ -97,26 +102,13 @@ const getAllProducts = async (query) => {
   };
 
   // Search
-  if (search) {
+  if (search?.trim()) {
+    const searchValue = escapeRegex(search.trim());
+
     filter.$or = [
-      {
-        name: {
-          $regex: search,
-          $options: "i",
-        },
-      },
-      {
-        sku: {
-          $regex: search,
-          $options: "i",
-        },
-      },
-      {
-        tags: {
-          $regex: search,
-          $options: "i",
-        },
-      },
+      { name: { $regex: searchValue, $options: "i" } },
+      { sku: { $regex: searchValue, $options: "i" } },
+      { tags: { $regex: searchValue, $options: "i" } },
     ];
   }
 
@@ -189,8 +181,8 @@ const getAllProducts = async (query) => {
 
   // Availability
   if (inStock === "true") {
-    filter.stock = {
-      $gt: 0,
+    filter.$expr = {
+      $gt: [availableStockExpression, 0],
     };
   }
 
@@ -287,8 +279,8 @@ const getRelatedProducts = async (productId, categoryId, limit = 4) => {
     category: categoryId,
     isActive: true,
     isArchived: false,
-    stock: {
-      $gt: 0,
+    $expr: {
+      $gt: [availableStockExpression, 0],
     },
   })
     .populate("category", "name slug")
@@ -477,7 +469,23 @@ const updateProduct = async (id, updateData, files = []) => {
      * --------------------------------
      */
 
-    Object.assign(product, updateData);
+    const { customization, tax, shipping, ...otherUpdates } = updateData;
+
+    Object.assign(product, otherUpdates);
+
+    if (customization) {
+      for (const [key, value] of Object.entries(customization)) {
+        product.set(`customization.${key}`, value);
+      }
+    }
+
+    if (tax) {
+      product.set("tax.rate", tax.rate);
+    }
+
+    if (shipping) {
+      product.set("shipping", shipping);
+    }
 
     product.images = finalImages;
 
@@ -567,21 +575,11 @@ const getAdminProducts = async (query) => {
    * Search
    */
   if (search?.trim()) {
-    const searchValue = search.trim();
+    const searchValue = escapeRegex(search.trim());
 
     filter.$or = [
-      {
-        name: {
-          $regex: searchValue,
-          $options: "i",
-        },
-      },
-      {
-        sku: {
-          $regex: searchValue,
-          $options: "i",
-        },
-      },
+      { name: { $regex: searchValue, $options: "i" } },
+      { sku: { $regex: searchValue, $options: "i" } },
     ];
   }
 
@@ -603,25 +601,29 @@ const getAdminProducts = async (query) => {
     filter.isActive = false;
   }
 
-  /*
-   * Inventory
-   */
+  // Inventory filters
   if (stock === "out") {
-    filter.stock = {
-      $lte: 0,
+    filter.$expr = {
+      $lte: [availableStockExpression, 0],
     };
   }
 
   if (stock === "low") {
-    filter.stock = {
-      $gt: 0,
-      $lte: 5,
+    filter.$expr = {
+      $and: [
+        {
+          $gt: [availableStockExpression, 0],
+        },
+        {
+          $lte: [availableStockExpression, { $ifNull: ["$lowStockThreshold", 5] }],
+        },
+      ],
     };
   }
 
   if (stock === "inStock") {
-    filter.stock = {
-      $gt: 0,
+    filter.$expr = {
+      $gt: [availableStockExpression, 0],
     };
   }
 

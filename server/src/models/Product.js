@@ -79,24 +79,40 @@ const productSchema = new mongoose.Schema(
       required: true,
       default: 0,
       min: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Stock must be a whole number",
+      },
     },
 
     reservedStock: {
       type: Number,
       default: 0,
       min: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Reserved stock must be a whole number",
+      },
     },
 
     lowStockThreshold: {
       type: Number,
       default: 5,
       min: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Low stock threshold must be a whole number",
+      },
     },
 
     sold: {
       type: Number,
       default: 0,
       min: 0,
+      validate: {
+        validator: Number.isInteger,
+        message: "Sold quantity must be a whole number",
+      },
     },
 
     images: {
@@ -134,6 +150,7 @@ const productSchema = new mongoose.Schema(
       maxImages: {
         type: Number,
         default: 1,
+        min: 1,
       },
 
       instructions: {
@@ -208,17 +225,31 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-productSchema.pre("save", function () {
-  if (this.isModified("name")) {
-    this.slug = slugify(this.name, {
+productSchema.pre("save", async function () {
+  if (!this.isModified("name")) return;
+
+  const baseSlug =
+    slugify(this.name, {
       lower: true,
       strict: true,
       trim: true,
-    });
-  }
-});
+    }) || "product";
 
-productSchema.index({ slug: 1 });
+  let candidateSlug = baseSlug;
+  let counter = 1;
+
+  while (
+    await this.constructor.exists({
+      _id: { $ne: this._id },
+      slug: candidateSlug,
+    })
+  ) {
+    candidateSlug = `${baseSlug}-${counter}`;
+    counter += 1;
+  }
+
+  this.slug = candidateSlug;
+});
 
 productSchema.index({ category: 1 });
 
