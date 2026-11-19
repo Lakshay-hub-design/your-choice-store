@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 import Link from "next/link";
 
@@ -43,24 +43,35 @@ export default function AdminProductsPage() {
     sort: "newest",
   });
 
+  const requestIdRef = useRef(0);
+
   const loadProducts = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+
     try {
       setIsLoading(true);
       setError("");
 
       const data = await getAdminProducts(filters);
 
-      setProducts(data?.products || []);
+      // Ignore stale responses
+      if (requestId !== requestIdRef.current) return;
 
+      setProducts(data?.products || []);
       setPagination(data?.pagination || null);
     } catch (error) {
+      // Ignore errors from stale requests
+      if (requestId !== requestIdRef.current) return;
+
       const message = error.response?.data?.message || "Unable to load products.";
 
       setError(message);
-
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      // Only the latest request controls loading state
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [filters]);
 
@@ -120,11 +131,10 @@ export default function AdminProductsPage() {
 
       await archiveAdminProduct(productToArchive._id);
 
-      setProducts((current) => current.filter((product) => product._id !== productToArchive._id));
-
       toast.success("Product archived successfully");
-
       setProductToArchive(null);
+
+      await loadProducts();
     } catch (error) {
       toast.error(error.response?.data?.message || "Unable to archive product.");
     } finally {

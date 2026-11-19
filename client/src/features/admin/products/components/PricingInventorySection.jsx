@@ -5,7 +5,10 @@ import NumberInput, { inputClass } from "@/components/ui/form/NumberInput";
 
 export default function PricingInventorySection({ form, updateField }) {
   return (
-    <FormCard title="Pricing & Inventory" description="Configure pricing and available stock.">
+    <FormCard
+      title="Pricing & Inventory"
+      description="Configure pricing and total physical inventory."
+    >
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <FormField label="Price" required>
           <NumberInput

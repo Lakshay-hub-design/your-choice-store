@@ -19,6 +19,18 @@ const booleanFromFormData = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const shippingSchema = z.object({
+  weight: z.coerce.number().min(0.001, "Shipping weight must be at least 0.001"),
+
+  dimensions: z.object({
+    length: z.coerce.number().min(0.1, "Length must be at least 0.1"),
+
+    breadth: z.coerce.number().min(0.1, "Breadth must be at least 0.1"),
+
+    height: z.coerce.number().min(0.1, "Height must be at least 0.1"),
+  }),
+});
+
 export const createProductSchema = z.object({
   body: z.object({
     name: z.string().trim().min(3, "Product name must be at least 3 characters").max(150),
@@ -44,27 +56,15 @@ export const createProductSchema = z.object({
       z.object({
         rate: z.coerce
           .number()
-          .refine((value) => [0, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
+          .refine((value) => [0, 3, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
       })
     ),
 
     stock: z.coerce.number().int().min(0),
 
     lowStockThreshold: z.coerce.number().int().min(0).optional(),
-    shipping: z.preprocess(
-      parseJSON,
-      z.object({
-        weight: z.coerce.number().positive("Shipping weight must be greater than 0"),
 
-        dimensions: z.object({
-          length: z.coerce.number().positive("Length must be greater than 0"),
-
-          breadth: z.coerce.number().positive("Breadth must be greater than 0"),
-
-          height: z.coerce.number().positive("Height must be greater than 0"),
-        }),
-      })
-    ),
+    shipping: z.preprocess(parseJSON, shippingSchema),
 
     isFeatured: booleanFromFormData.optional(),
 
@@ -128,7 +128,7 @@ export const updateProductSchema = z.object({
           .object({
             rate: z.coerce
               .number()
-              .refine((value) => [0, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
+              .refine((value) => [0, 3, 5, 12, 18, 28].includes(value), "Invalid tax rate"),
           })
           .optional()
       ),
@@ -166,22 +166,7 @@ export const updateProductSchema = z.object({
           .optional()
       ),
 
-      shipping: z.preprocess(
-        parseJSON,
-        z
-          .object({
-            weight: z.coerce.number().positive("Shipping weight must be greater than 0"),
-
-            dimensions: z.object({
-              length: z.coerce.number().positive("Length must be greater than 0"),
-
-              breadth: z.coerce.number().positive("Breadth must be greater than 0"),
-
-              height: z.coerce.number().positive("Height must be greater than 0"),
-            }),
-          })
-          .optional()
-      ),
+      shipping: z.preprocess(parseJSON, shippingSchema),
 
       /*
        * IDs of existing images that

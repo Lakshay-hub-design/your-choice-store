@@ -153,6 +153,31 @@ export default function ProductForm({
       return;
     }
 
+    const remainingExisting = existingImages.filter(
+      (image) => !removedImages.includes(image.fileId)
+    ).length;
+
+    const totalImages = remainingExisting + images.length + selectedFiles.length;
+
+    const invalidFile = selectedFiles.find(
+      (file) =>
+        !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+        file.size > 5 * 1024 * 1024
+    );
+
+    if (invalidFile) {
+      toast.error("Only JPG, PNG and WEBP images up to 5 MB are allowed.");
+
+      event.target.value = "";
+      return;
+    }
+
+    if (totalImages > 8) {
+      toast.error("A product can have a maximum of 8 images.");
+      event.target.value = "";
+      return;
+    }
+
     setImages((current) => [...current, ...selectedFiles]);
 
     event.target.value = "";
@@ -177,24 +202,46 @@ export default function ProductForm({
   ================================= */
 
   const validateForm = () => {
-    if (!form.name.trim()) {
+    // Product name
+    if (!form.name?.trim()) {
       return "Product name is required.";
     }
 
-    if (!form.description.trim()) {
+    if (form.name.trim().length < 3 || form.name.trim().length > 150) {
+      return "Product name must be between 3 and 150 characters.";
+    }
+
+    // Description
+    if (!form.description?.trim()) {
       return "Product description is required.";
     }
 
+    if (form.description.trim().length < 10) {
+      return "Description must contain at least 10 characters.";
+    }
+
+    // Short description
+    if ((form.shortDescription || "").trim().length > 250) {
+      return "Short description cannot exceed 250 characters.";
+    }
+
+    // Category
     if (!form.category) {
       return "Please select a category.";
     }
 
+    // Product type
     if (!["gift", "toy"].includes(form.productType)) {
       return "Please select a product type.";
     }
 
-    if (!form.sku.trim()) {
+    // SKU
+    if (!form.sku?.trim()) {
       return "SKU is required.";
+    }
+
+    if (form.sku.trim().length < 3 || form.sku.trim().length > 50) {
+      return "SKU must be between 3 and 50 characters.";
     }
 
     if (form.price === "" || Number(form.price) < 0) {
@@ -203,6 +250,10 @@ export default function ProductForm({
 
     if (form.stock === "" || Number(form.stock) < 0) {
       return "Please enter valid stock.";
+    }
+
+    if (form.stock === "" || !Number.isInteger(Number(form.stock)) || Number(form.stock) < 0) {
+      return "Stock must be a non-negative whole number.";
     }
 
     const taxRate = Number(form.tax?.rate);
@@ -225,20 +276,20 @@ export default function ProductForm({
 
     const height = Number(form.shipping?.dimensions?.height);
 
-    if (!Number.isFinite(weight) || weight <= 0) {
-      return "Please enter a valid shipping weight.";
+    if (!Number.isFinite(weight) || weight < 0.001) {
+      return "Shipping weight must be at least 0.001.";
     }
 
-    if (!Number.isFinite(length) || length <= 0) {
-      return "Please enter a valid package length.";
+    if (!Number.isFinite(length) || length < 0.1) {
+      return "Package length must be at least 0.1.";
     }
 
-    if (!Number.isFinite(breadth) || breadth <= 0) {
-      return "Please enter a valid package breadth.";
+    if (!Number.isFinite(breadth) || breadth < 0.1) {
+      return "Package breadth must be at least 0.1.";
     }
 
-    if (!Number.isFinite(height) || height <= 0) {
-      return "Please enter a valid package height.";
+    if (!Number.isFinite(height) || height < 0.1) {
+      return "Package height must be at least 0.1.";
     }
 
     const remainingExisting = existingImages.filter(
@@ -249,6 +300,10 @@ export default function ProductForm({
 
     if (totalImages === 0) {
       return "At least one product image is required.";
+    }
+
+    if (totalImages > 8) {
+      return "A product can have a maximum of 8 images.";
     }
 
     return null;
@@ -285,7 +340,6 @@ export default function ProductForm({
         images,
         removedImages,
       });
-      console.log("PRODUCT FORM:", form);
       await onSubmit(formData);
     } catch (error) {
       const message =

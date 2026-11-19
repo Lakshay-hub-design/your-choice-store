@@ -9,7 +9,9 @@ export default function ProductInfo({ product }) {
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : 0;
 
-  const inStock = product.stock > 0;
+  const availableStock = Math.max(0, (product.stock || 0) - (product.reservedStock || 0));
+
+  const inStock = availableStock > 0;
 
   return (
     <div className="flex flex-col">
@@ -72,9 +74,9 @@ export default function ProductInfo({ product }) {
           <span className="text-sm font-semibold text-red-500">Out of Stock</span>
         )}
 
-        {inStock && product.stock <= product.lowStockThreshold && (
+        {inStock && availableStock <= product.lowStockThreshold && (
           <p className="mt-1 text-xs font-medium text-orange-500">
-            Only {product.stock} left in stock
+            Only {availableStock} left in stock
           </p>
         )}
       </div>

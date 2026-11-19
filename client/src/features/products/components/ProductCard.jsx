@@ -43,7 +43,9 @@ export default function ProductCard({ product }) {
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : 0;
 
-  const outOfStock = product.stock <= 0;
+  const availableStock = Math.max(0, (product.stock || 0) - (product.reservedStock || 0));
+
+  const outOfStock = availableStock <= 0;
 
   const handleAddToCart = async (event) => {
     event.preventDefault();

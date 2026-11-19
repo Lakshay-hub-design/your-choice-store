@@ -30,7 +30,13 @@ export default function ProductImagesSection({
 
         <p className="mt-1 text-xs text-[#9CA3AF]">Select one or multiple images</p>
 
-        <input type="file" accept="image/*" multiple onChange={onAddImages} className="hidden" />
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          onChange={onAddImages}
+          className="hidden"
+        />
       </label>
 
       {(visibleExistingImages.length > 0 || previews.length > 0) && (

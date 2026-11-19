@@ -92,6 +92,19 @@ export default function ProductFilters({ categories = [], onFilterApplied }) {
    * Apply price
    */
   const handlePriceApply = () => {
+    if (minPrice && Number(minPrice) < 0) {
+      return;
+    }
+
+    if (maxPrice && Number(maxPrice) < 0) {
+      return;
+    }
+
+    if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
+      // Display a toast or inline validation message.
+      return;
+    }
+
     updateFilters({
       minPrice,
       maxPrice,

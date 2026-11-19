@@ -94,7 +94,11 @@ function ProductRow({ product, onStatusChange, onArchive }) {
       {/* Stock */}
 
       <td className="px-5 py-4">
-        <StockBadge stock={product.stock} />
+        <StockBadge
+          stock={product.stock}
+          reservedStock={product.reservedStock}
+          lowStockThreshold={product.lowStockThreshold}
+        />
       </td>
 
       {/* Status */}
@@ -120,8 +124,10 @@ function ProductRow({ product, onStatusChange, onArchive }) {
   );
 }
 
-function StockBadge({ stock = 0 }) {
-  if (stock <= 0) {
+function StockBadge({ stock = 0, reservedStock = 0, lowStockThreshold = 5 }) {
+  const availableStock = Math.max(0, stock - reservedStock);
+
+  if (availableStock === 0) {
     return (
       <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
         Out of stock
@@ -129,15 +135,15 @@ function StockBadge({ stock = 0 }) {
     );
   }
 
-  if (stock <= 5) {
+  if (availableStock <= lowStockThreshold) {
     return (
       <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600">
-        {stock} left
+        {availableStock} left
       </span>
     );
   }
 
-  return <span className="text-sm font-medium text-[#242424]">{stock}</span>;
+  return <span className="text-sm font-medium text-[#242424]">{availableStock} available</span>;
 }
 
 function TableHeading({ children }) {

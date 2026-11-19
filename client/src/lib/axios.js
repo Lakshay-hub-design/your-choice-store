@@ -91,7 +91,11 @@ api.interceptors.response.use(
 
         return api(originalRequest);
       } catch (refreshError) {
-        useAuthStore.getState().clearAuth();
+        const status = refreshError.response?.status;
+
+        if (status === 401 || status === 403) {
+          useAuthStore.getState().clearAuth();
+        }
 
         return Promise.reject(refreshError);
       }
