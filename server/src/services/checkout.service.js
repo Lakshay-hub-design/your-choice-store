@@ -7,15 +7,16 @@ import ApiError from "../utils/ApiError.js";
 import cartPricingService from "./cartPricing.service.js";
 import shippingService from "../features/shipping/services/shipping.service.js";
 
-const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "ONLINE" }) => {
+const getCheckoutSummary = async ({
+  userId,
+  addressId = null,
+  paymentMethod = "ONLINE",
+  productId = null,
+}) => {
   const [cart, addresses] = await Promise.all([
-    Cart.findOne({
-      user: userId,
-    }),
+    Cart.findOne({ user: userId }),
 
-    Address.find({
-      user: userId,
-    }).sort({
+    Address.find({ user: userId }).sort({
       isDefault: -1,
       createdAt: -1,
     }),
@@ -25,7 +26,41 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
     throw new ApiError(400, "Your cart is empty");
   }
 
-  const productIds = cart.items.map((item) => item.product);
+  /*
+   * --------------------------------
+   * Select cart items
+   * --------------------------------
+   *
+   * productId is optional:
+   * - null: checkout the entire cart
+   * - provided: checkout only that product
+   */
+
+  let selectedCartItems = cart.items;
+
+  if (productId) {
+    selectedCartItems = cart.items.filter(
+      (item) => item.product.toString() === productId.toString()
+    );
+
+    if (selectedCartItems.length === 0) {
+      throw new ApiError(400, "Selected product is not in your cart.");
+    }
+  }
+
+  // Create a separate cart object without modifying the original cart.
+  const checkoutCart = {
+    ...cart.toObject(),
+    items: selectedCartItems,
+  };
+
+  /*
+   * --------------------------------
+   * Fetch selected products
+   * --------------------------------
+   */
+
+  const productIds = selectedCartItems.map((item) => item.product);
 
   const products = await Product.find({
     _id: {
@@ -33,8 +68,14 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
     },
   }).select("name slug sku price comparePrice stock images isActive shipping tax");
 
+  /*
+   * --------------------------------
+   * Calculate pricing
+   * --------------------------------
+   */
+
   const { items, pricing } = cartPricingService.buildCartSummary({
-    cart,
+    cart: checkoutCart,
     products,
   });
 
@@ -42,7 +83,7 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
 
   /*
    * --------------------------------
-   * Determine address for shipping
+   * Determine shipping address
    * --------------------------------
    */
 
@@ -55,10 +96,6 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
       throw new ApiError(404, "Selected address not found.");
     }
   } else {
-    /*
-     * If no address was explicitly selected,
-     * use the default address.
-     */
     shippingAddress = defaultAddress;
   }
 
@@ -66,12 +103,6 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
    * --------------------------------
    * Calculate shipping
    * --------------------------------
-   *
-   * We only calculate a Shiprocket quote
-   * when an address is available.
-   *
-   * This allows checkout to load even when
-   * the customer has not selected an address.
    */
 
   let shippingQuote = null;
@@ -79,7 +110,7 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
   if (shippingAddress) {
     shippingQuote = await shippingService.getShippingQuote({
       products,
-      cart,
+      cart: checkoutCart,
       deliveryPostcode: shippingAddress.postalCode,
       paymentMethod,
     });
@@ -95,23 +126,16 @@ const getCheckoutSummary = async ({ userId, addressId = null, paymentMethod = "O
 
   const finalPricing = {
     ...pricing,
-
     shippingFee,
-
-    grandTotal: pricing.itemsTotal + shippingFee,
+    grandTotal: Number((pricing.itemsTotal + shippingFee).toFixed(2)),
   };
 
   return {
     items,
-
     addresses,
-
     defaultAddress,
-
     selectedAddress: shippingAddress,
-
     shipping: shippingQuote,
-
     pricing: finalPricing,
   };
 };

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   AlertCircle,
@@ -30,13 +30,19 @@ import ProtectedRoute from "@/features/auth/ProtectedRoute";
 export default function CheckoutPage() {
   return (
     <ProtectedRoute>
-      <CheckoutContent />
+      <Suspense fallback={<CheckoutLoading />}>
+        <CheckoutContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }
 
 function CheckoutContent() {
   const router = useRouter();
+
+  const searchParams = useSearchParams();
+
+  const productId = searchParams.get("productId");
 
   const [checkout, setCheckout] = useState(null);
 
@@ -68,57 +74,67 @@ function CheckoutContent() {
      LOAD / REFRESH CHECKOUT
   ======================================== */
 
-  const loadCheckout = useCallback(async ({ showLoader = false } = {}) => {
-    try {
-      if (showLoader) {
-        setIsLoading(true);
-      }
-
-      setError("");
-
-      const response = await getCheckoutSummary();
-
-      const data = response.data?.data;
-
-      if (!data) {
-        throw new Error("Checkout data is unavailable.");
-      }
-
-      setCheckout(data);
-
-      setSelectedAddressId((currentAddressId) => {
-        const addressStillExists = data.addresses?.some(
-          (address) => address._id === currentAddressId
-        );
-
-        if (addressStillExists) {
-          return currentAddressId;
+  const loadCheckout = useCallback(
+    async ({ showLoader = false } = {}) => {
+      try {
+        if (showLoader) {
+          setIsLoading(true);
         }
 
-        if (data.defaultAddress?._id) {
-          return data.defaultAddress._id;
+        setError("");
+
+        const response = await getCheckoutSummary({
+          productId,
+        });
+
+        const data = response.data?.data;
+
+        if (!data) {
+          throw new Error("Checkout data is unavailable.");
         }
 
-        if (data.addresses?.length) {
-          return data.addresses[0]._id;
-        }
+        setCheckout(data);
+
+        setSelectedAddressId((currentAddressId) => {
+          const addressStillExists = data.addresses?.some(
+            (address) => address._id === currentAddressId
+          );
+
+          if (addressStillExists) {
+            return currentAddressId;
+          }
+
+          if (data.defaultAddress?._id) {
+            return data.defaultAddress._id;
+          }
+
+          if (data.addresses?.length) {
+            return data.addresses[0]._id;
+          }
+
+          return null;
+        });
+
+        return data;
+      } catch (error) {
+        const message =
+          error.response?.data?.message || error.message || "Unable to load checkout.";
+
+        setError(message);
 
         return null;
-      });
-
-      return data;
-    } catch (error) {
-      const message = error.response?.data?.message || error.message || "Unable to load checkout.";
-
-      setError(message);
-
-      return null;
-    } finally {
-      if (showLoader) {
-        setIsLoading(false);
+      } finally {
+        if (showLoader) {
+          setIsLoading(false);
+        }
       }
-    }
-  }, []);
+    },
+    [productId]
+  );
+
+  useEffect(() => {
+    idempotencyKeyRef.current = null;
+  }, [productId]);
 
   /* ========================================
      REFRESH SHIPPING QUOTE
@@ -141,6 +157,7 @@ function CheckoutContent() {
         const response = await getCheckoutSummary({
           addressId: selectedAddressId,
           paymentMethod,
+          productId,
         });
 
         const data = response.data?.data;
@@ -179,7 +196,7 @@ function CheckoutContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAddressId, paymentMethod]);
+  }, [selectedAddressId, paymentMethod, productId]);
 
   /* ========================================
      INITIAL CHECKOUT
@@ -242,6 +259,8 @@ function CheckoutContent() {
           addressId: selectedAddressId,
           paymentMethod,
 
+          ...(productId ? { productId } : {}),
+
           expectedTotal: checkout.pricing.grandTotal,
         },
         idempotencyKeyRef.current
@@ -264,7 +283,7 @@ function CheckoutContent() {
           throw new Error("Order was placed but order information is unavailable.");
         }
 
-        useCartStore.getState().resetCart();
+        await useCartStore.getState().fetchCart();
 
         idempotencyKeyRef.current = null;
 
@@ -536,7 +555,7 @@ function CheckoutContent() {
                 paymentFailed={paymentFailed}
                 paymentData={paymentData}
                 isPlacingOrder={isPlacingOrder}
-                onSuccess={(result) => {
+                onSuccess={async (result) => {
                   const paidOrder = result.data?.order;
 
                   if (!paidOrder?._id) {
@@ -545,7 +564,7 @@ function CheckoutContent() {
                     return;
                   }
 
-                  useCartStore.getState().resetCart();
+                  await useCartStore.getState().fetchCart();
 
                   idempotencyKeyRef.current = null;
 

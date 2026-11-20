@@ -1,42 +1,28 @@
 import Link from "next/link";
+import Image from "next/image";
 
-export default function Logo({ href = "/", size = "default" }) {
-  const sizes = {
-    small: {
-      logo: "h-9 w-9 text-base",
-      title: "text-lg",
-      subtitle: "text-[10px]",
-    },
-
-    default: {
-      logo: "h-11 w-11 text-lg",
-      title: "text-xl",
-      subtitle: "text-xs",
-    },
-
-    large: {
-      logo: "h-14 w-14 text-xl",
-      title: "text-2xl",
-      subtitle: "text-sm",
-    },
-  };
-
-  const current = sizes[size] || sizes.default;
-
+export default function Logo({ compact = false }) {
   return (
-    <Link href={href} className="inline-flex items-center gap-3">
-      <div
-        className={`flex ${current.logo} items-center justify-center rounded-xl bg-[#FF5A5F] font-bold text-white shadow-sm`}
-      >
-        YC
+    <Link href="/" className="flex shrink-0 items-center gap-2">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF5A5F]/10 text-xl">
+        <Image
+          src="/images/logo.png"
+          alt="YC Gifts & Toys Logo"
+          width={24}
+          height={24}
+          className="h-8 w-8 object-contain"
+        />
       </div>
 
       <div>
-        <h1 className={`${current.title} font-bold tracking-tight text-[#242424]`}>
-          YC GIFTS & TOYS
-        </h1>
+        <div className={`font-extrabold tracking-tight ${compact ? "text-sm" : "text-lg"}`}>
+          <span className="bg-gradient-to-r from-[#C026D3] via-[#EC1B69] to-[#FF3366] bg-clip-text text-transparent">
+            YC
+          </span>{" "}
+          <span className="text-[#242424]">GIFTS & TOYS</span>
+        </div>
 
-        <p className={`${current.subtitle} text-[#6B7280]`}>Gifts for Every Occasion</p>
+        {!compact && <p className="text-[10px] text-[#6B7280]">Gifts that create smiles ❤️</p>}
       </div>
     </Link>
   );

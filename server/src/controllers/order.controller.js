@@ -11,7 +11,7 @@ import { sendSellerPaidOrderEmail } from "../features/notifications/services/sel
 import { createAdminOrderNotification } from "../services/notification.service.js";
 
 const placeOrder = asyncHandler(async (req, res) => {
-  const { addressId, paymentMethod } = req.body;
+  const { addressId, paymentMethod, productId } = req.body;
 
   const idempotencyKey = req.headers["idempotency-key"];
 
@@ -25,9 +25,8 @@ const placeOrder = asyncHandler(async (req, res) => {
     case "COD":
       result = await orderService.placeCODOrder({
         userId: req.user._id,
-
         addressId,
-
+        productId: productId || null,
         idempotencyKey,
       });
 
@@ -41,9 +40,8 @@ const placeOrder = asyncHandler(async (req, res) => {
     case "ONLINE":
       result = await orderService.placeOnlineOrder({
         userId: req.user._id,
-
         addressId,
-
+        productId: productId || null,
         idempotencyKey,
       });
 

@@ -266,15 +266,9 @@ const finalizeOnlinePayment = async ({
     session.startTransaction();
 
     /*
-     * Find our order.
-     *
-     * userId is supplied when this function
-     * is called from the normal frontend
-     * verification flow.
-     *
-     * Webhooks don't have our user's JWT,
-     * so userId can be null.
+     * 1. Find our order.
      */
+
     const orderFilter = {
       _id: orderId,
       paymentMethod: "ONLINE",
@@ -291,16 +285,12 @@ const finalizeOnlinePayment = async ({
     }
 
     /*
-     * Already paid.
+     * 2. Handle already-paid orders.
      *
-     * This is extremely important because:
-     *
-     * frontend verification
-     * and
-     * webhook
-     *
-     * can both reach the server.
+     * Frontend verification and webhook
+     * may both reach this function.
      */
+
     if (order.paymentStatus === "PAID") {
       await session.commitTransaction();
 
@@ -313,42 +303,37 @@ const finalizeOnlinePayment = async ({
     }
 
     /*
-     * Cancelled orders cannot be finalized.
+     * 3. Validate order status.
      */
+
     if (order.orderStatus === ORDER_STATUS.CANCELLED) {
       throw new ApiError(400, "This order is no longer payable.");
     }
 
-    /*
-     * Only PENDING payments can be finalized.
-     */
     if (order.paymentStatus !== "PENDING") {
       throw new ApiError(409, "This payment can no longer be processed.");
     }
 
     /*
-     * Verify Razorpay order ID.
-     *
-     * This ensures that the payment belongs
-     * to THIS order.
+     * 4. Verify Razorpay order ID.
      */
+
     if (razorpayPayment.order_id !== order.payment.providerOrderId) {
       throw new ApiError(400, "Payment does not belong to this order.");
     }
 
     /*
-     * Currency verification.
+     * 5. Verify currency.
      */
+
     if (razorpayPayment.currency !== "INR") {
       throw new ApiError(400, "Invalid payment currency.");
     }
 
     /*
-     * Amount verification.
-     *
-     * Our database stores rupees.
-     * Razorpay stores paise.
+     * 6. Verify amount.
      */
+
     const expectedAmount = Math.round(order.pricing.grandTotal * 100);
 
     if (Number(razorpayPayment.amount) !== expectedAmount) {
@@ -356,34 +341,31 @@ const finalizeOnlinePayment = async ({
     }
 
     /*
-     * Payment must actually be captured.
+     * 7. Verify captured status.
      */
+
     if (razorpayPayment.status !== "captured") {
       throw new ApiError(400, "Payment has not been captured yet.");
     }
 
     /*
      * ========================================
-     * INVENTORY
+     * 8. FINALIZE INVENTORY
      * ========================================
      *
      * Before payment:
+     * stock = reduced
+     * reservedStock = increased
      *
-     * stock = available stock
-     * reservedStock = temporarily reserved
-     *
-     * After successful payment:
-     *
-     * reservedStock decreases
-     * sold increases
-     *
-     * We DO NOT increase stock here.
+     * After payment:
+     * reservedStock = reduced
+     * sold = increased
      */
+
     for (const item of order.items) {
       const result = await Product.updateOne(
         {
           _id: item.product,
-
           reservedStock: {
             $gte: item.quantity,
           },
@@ -406,7 +388,7 @@ const finalizeOnlinePayment = async ({
 
     /*
      * ========================================
-     * PAYMENT
+     * 9. UPDATE PAYMENT
      * ========================================
      */
 
@@ -414,12 +396,6 @@ const finalizeOnlinePayment = async ({
 
     order.payment.paymentId = razorpayPayment.id;
 
-    /*
-     * Frontend verification has a Razorpay
-     * payment signature.
-     *
-     * Webhook does not use this same field.
-     */
     if (razorpaySignature) {
       order.payment.signature = razorpaySignature;
     }
@@ -430,7 +406,7 @@ const finalizeOnlinePayment = async ({
 
     /*
      * ========================================
-     * ORDER
+     * 10. UPDATE ORDER STATUS
      * ========================================
      */
 
@@ -441,21 +417,51 @@ const finalizeOnlinePayment = async ({
       timestamp: new Date(),
     });
 
+    /*
+     * ========================================
+     * 11. REMOVE PURCHASED ITEMS FROM CART
+     * ========================================
+     *
+     * Use order.items as the source of truth.
+     *
+     * Full-cart order:
+     * All ordered products are removed.
+     *
+     * Buy Now order:
+     * Only the purchased product is removed.
+     */
+
     const cart = await Cart.findOne({
       user: order.user,
     }).session(session);
 
     if (cart) {
-      cart.items = [];
+      const purchasedProductIds = new Set(order.items.map((item) => item.product.toString()));
+
+      cart.items = cart.items.filter(
+        (cartItem) => !purchasedProductIds.has(cartItem.product.toString())
+      );
 
       await cart.save({
         session,
       });
     }
 
+    /*
+     * ========================================
+     * 12. SAVE ORDER
+     * ========================================
+     */
+
     await order.save({
       session,
     });
+
+    /*
+     * ========================================
+     * 13. COMMIT TRANSACTION
+     * ========================================
+     */
 
     await session.commitTransaction();
 
@@ -726,18 +732,20 @@ const processPaidOrder = async ({ orderId }) => {
 /**
  * Place a Cash on Delivery order.
  */
-const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
+
+const placeCODOrder = async ({ userId, addressId, productId = null, idempotencyKey }) => {
   if (!mongoose.Types.ObjectId.isValid(addressId)) {
     throw new ApiError(400, "Invalid address ID");
+  }
+
+  if (productId && !mongoose.Types.ObjectId.isValid(productId)) {
+    throw new ApiError(400, "Invalid product ID");
   }
 
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
     throw new ApiError(400, "Idempotency key is required");
   }
 
-  /*
-   * Normalize and limit the key.
-   */
   const normalizedIdempotencyKey = idempotencyKey.trim();
 
   if (!normalizedIdempotencyKey || normalizedIdempotencyKey.length > 100) {
@@ -745,15 +753,37 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
   }
 
   /*
-   * Fast path:
-   *
-   * If this request was already completed,
-   * return the previously created order.
+   * --------------------------------
+   * Idempotency helper
+   * --------------------------------
    */
-  const existingOrder = await Order.findOne({
-    user: userId,
-    idempotencyKey: normalizedIdempotencyKey,
-  });
+
+  const findExistingOrder = async () => {
+    const existingOrder = await Order.findOne({
+      user: userId,
+      idempotencyKey: normalizedIdempotencyKey,
+    });
+
+    if (existingOrder && productId) {
+      const isSameSingleProductOrder =
+        existingOrder.items.length === 1 &&
+        existingOrder.items[0].product.toString() === productId.toString();
+
+      if (!isSameSingleProductOrder) {
+        throw new ApiError(409, "This idempotency key was already used for a different order.");
+      }
+    }
+
+    return existingOrder;
+  };
+
+  /*
+   * --------------------------------
+   * Fast idempotency check
+   * --------------------------------
+   */
+
+  const existingOrder = await findExistingOrder();
 
   if (existingOrder) {
     return existingOrder;
@@ -767,6 +797,7 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     /*
      * 1. Validate address ownership.
      */
+
     const address = await Address.findOne({
       _id: addressId,
       user: userId,
@@ -779,6 +810,7 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     /*
      * 2. Load cart.
      */
+
     const cart = await Cart.findOne({
       user: userId,
     }).session(session);
@@ -788,9 +820,38 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     }
 
     /*
-     * 3. Load latest product data.
+     * 3. Select cart items.
+     *
+     * Normal checkout:
+     * All cart items are selected.
+     *
+     * Buy Now:
+     * Only the requested product is selected.
      */
-    const productIds = cart.items.map((item) => item.product);
+
+    let selectedCartItems = cart.items;
+
+    if (productId) {
+      selectedCartItems = cart.items.filter(
+        (item) => item.product.toString() === productId.toString()
+      );
+
+      if (selectedCartItems.length === 0) {
+        throw new ApiError(400, "Selected product is not in your cart.");
+      }
+    }
+
+    // Do not modify the original cart document here.
+    const checkoutCart = {
+      ...cart.toObject(),
+      items: selectedCartItems,
+    };
+
+    /*
+     * 4. Load selected product data.
+     */
+
+    const productIds = selectedCartItems.map((item) => item.product);
 
     const products = await Product.find({
       _id: {
@@ -799,86 +860,73 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     }).session(session);
 
     /*
-     * 4. Validate products, stock and
-     * calculate server-authoritative pricing.
+     * 5. Validate products, stock and calculate pricing.
      */
+
     const { items: orderItems, pricing } = cartPricingService.buildCartSummary({
-      cart,
+      cart: checkoutCart,
       products,
     });
 
     /*
-     * 5. Snapshot delivery address.
+     * 6. Snapshot delivery address.
      */
+
     const shippingAddress = {
       fullName: address.fullName,
-
       phone: address.phone,
-
       houseNumber: address.houseNumber,
-
       landmark: address.landmark || "",
-
       formattedAddress: address.formattedAddress,
-
       city: address.city,
-
       state: address.state,
-
       postalCode: address.postalCode,
-
       country: address.country || "India",
     };
 
+    /*
+     * 7. Calculate shipping for selected items only.
+     */
+
     const shippingQuote = await shippingService.getShippingQuote({
       products,
-      cart,
+      cart: checkoutCart,
       deliveryPostcode: address.postalCode,
       paymentMethod: "COD",
     });
 
+    const shippingFee = shippingQuote?.shippingFee || 0;
+
     const finalPricing = {
       ...pricing,
-
-      shippingFee: shippingQuote.shippingFee,
-
-      grandTotal: pricing.itemsTotal + shippingQuote.shippingFee,
+      shippingFee,
+      grandTotal: Number((pricing.itemsTotal + shippingFee).toFixed(2)),
     };
 
     /*
-     * 6. Create order.
+     * 8. Create order.
      */
+
     const placedAt = new Date();
 
     const [order] = await Order.create(
       [
         {
           orderNumber: generateOrderNumber(),
-
           user: userId,
-
           idempotencyKey: normalizedIdempotencyKey,
-
           items: orderItems,
-
           shippingAddress,
-
           pricing: finalPricing,
-
           paymentMethod: "COD",
-
           paymentStatus: "PENDING",
-
           orderStatus: ORDER_STATUS.PLACED,
-
           statusHistory: [
             {
               status: ORDER_STATUS.PLACED,
-
               timestamp: placedAt,
             },
           ],
-
           placedAt,
         },
       ],
@@ -888,15 +936,15 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     );
 
     /*
-     * 7. Atomically reduce inventory.
+     * 9. Atomically reduce inventory
+     * for selected products only.
      */
-    for (const cartItem of cart.items) {
+
+    for (const cartItem of selectedCartItems) {
       const result = await Product.updateOne(
         {
           _id: cartItem.product,
-
           isActive: true,
-
           stock: {
             $gte: cartItem.quantity,
           },
@@ -904,7 +952,6 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
         {
           $inc: {
             stock: -cartItem.quantity,
-
             sold: cartItem.quantity,
           },
         },
@@ -922,18 +969,34 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     }
 
     /*
-     * 8. Clear cart.
+     * 10. Remove purchased items from cart.
+     *
+     * Buy Now:
+     * Remove only the selected product.
+     *
+     * Normal checkout:
+     * Clear the entire cart.
      */
-    cart.items = [];
+
+    if (productId) {
+      cart.items = cart.items.filter((item) => item.product.toString() !== productId.toString());
+    } else {
+      cart.items = [];
+    }
 
     await cart.save({
       session,
     });
 
     /*
-     * 9. Commit transaction.
+     * 11. Commit transaction.
      */
+
     await session.commitTransaction();
+
+    /*
+     * 12. Create Shiprocket shipment.
+     */
 
     try {
       const user = await User.findById(userId).select("fullName email phone");
@@ -969,7 +1032,6 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
       order.shipment.shipmentId = String(shipmentId);
 
       order.shipment.currentStatus = "CREATED";
-
       order.shipment.failureReason = "";
 
       await order.save();
@@ -985,6 +1047,10 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
       });
     }
 
+    /*
+     * 13. Send notifications.
+     */
+
     sendSellerNewOrderEmail(order).catch((error) => {
       console.error("Seller order email failed:", error);
     });
@@ -998,26 +1064,19 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
     return order;
   } catch (error) {
     /*
-     * Abort only if the transaction
-     * is still active.
+     * Abort only if transaction is active.
      */
+
     if (session.inTransaction()) {
       await session.abortTransaction();
     }
 
     /*
-     * MongoDB duplicate-key error.
-     *
-     * Another request with the same
-     * idempotency key may have completed
-     * concurrently.
+     * Handle duplicate idempotency key.
      */
-    if (error?.code === 11000) {
-      const existingOrder = await Order.findOne({
-        user: userId,
 
-        idempotencyKey: normalizedIdempotencyKey,
-      });
+    if (error?.code === 11000) {
+      const existingOrder = await findExistingOrder();
 
       if (existingOrder) {
         return existingOrder;
@@ -1030,7 +1089,7 @@ const placeCODOrder = async ({ userId, addressId, idempotencyKey }) => {
   }
 };
 
-const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
+const placeOnlineOrder = async ({ userId, addressId, productId = null, idempotencyKey }) => {
   /*
    * ============================================
    * 1. Validate request
@@ -1039,6 +1098,10 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   if (!mongoose.Types.ObjectId.isValid(addressId)) {
     throw new ApiError(400, "Invalid address ID");
+  }
+
+  if (productId && !mongoose.Types.ObjectId.isValid(productId)) {
+    throw new ApiError(400, "Invalid product ID");
   }
 
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
@@ -1053,7 +1116,29 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   /*
    * ============================================
-   * 2. Fast idempotency check
+   * 2. Helper: validate existing order selection
+   * ============================================
+   *
+   * A single-product checkout must not
+   * accidentally reuse an order for another
+   * product using the same idempotency key.
+   */
+
+  const validateExistingOrder = (existingOrder) => {
+    if (!productId) {
+      return;
+    }
+
+    const orderProductIds = existingOrder.items.map((item) => item.product.toString());
+
+    if (orderProductIds.length !== 1 || orderProductIds[0] !== productId.toString()) {
+      throw new ApiError(409, "This idempotency key was already used for a different order.");
+    }
+  };
+
+  /*
+   * ============================================
+   * 3. Fast idempotency check
    * ============================================
    */
 
@@ -1063,10 +1148,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
   });
 
   if (existingOrder) {
-    /*
-     * If payment order has already
-     * been initialized, return it.
-     */
+    validateExistingOrder(existingOrder);
 
     if (existingOrder.payment?.providerOrderId) {
       return {
@@ -1074,35 +1156,21 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
         payment: {
           provider: "RAZORPAY",
-
           keyId: process.env.RAZORPAY_KEY_ID,
-
           orderId: existingOrder.payment.providerOrderId,
-
           amount: Math.round(existingOrder.pricing.grandTotal * 100),
-
           currency: "INR",
         },
       };
     }
 
-    /*
-     * An order exists but Razorpay
-     * initialization hasn't completed.
-     *
-     * Don't create another order.
-     */
     throw new ApiError(409, "Your payment is already being initialized. Please try again.");
   }
 
   /*
    * ============================================
-   * 3. Load address and cart
+   * 4. Load address and cart
    * ============================================
-   *
-   * We do this before creating the
-   * Razorpay order so the amount is
-   * calculated entirely by our backend.
    */
 
   const address = await Address.findOne({
@@ -1124,30 +1192,54 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   /*
    * ============================================
-   * 4. Load latest product information
+   * 5. Select cart items
+   * ============================================
+   *
+   * No productId = full cart checkout.
+   * productId = selected product only.
+   */
+
+  let selectedCartItems = cart.items;
+
+  if (productId) {
+    selectedCartItems = cart.items.filter(
+      (item) => item.product.toString() === productId.toString()
+    );
+
+    if (selectedCartItems.length === 0) {
+      throw new ApiError(400, "Selected product is not in your cart.");
+    }
+  }
+
+  const checkoutCart = {
+    ...cart.toObject(),
+    items: selectedCartItems,
+  };
+
+  /*
+   * ============================================
+   * 6. Load latest product information
    * ============================================
    */
 
-  const productIds = cart.items.map((item) => item.product);
+  const productIds = selectedCartItems.map((item) => item.product);
 
   const products = await Product.find({
     _id: {
       $in: productIds,
     },
-
     isActive: true,
-
     isArchived: false,
   });
 
   /*
    * ============================================
-   * 5. Server-authoritative pricing
+   * 7. Server-authoritative pricing
    * ============================================
    */
 
   const { items: orderItems, pricing } = cartPricingService.buildCartSummary({
-    cart,
+    cart: checkoutCart,
     products,
   });
 
@@ -1157,22 +1249,20 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   const shippingQuote = await shippingService.getShippingQuote({
     products,
-    cart,
+    cart: checkoutCart,
     deliveryPostcode: address.postalCode,
     paymentMethod: "ONLINE",
   });
 
   const finalPricing = {
     ...pricing,
-
     shippingFee: shippingQuote.shippingFee,
-
-    grandTotal: pricing.itemsTotal + shippingQuote.shippingFee,
+    grandTotal: Number((pricing.itemsTotal + shippingQuote.shippingFee).toFixed(2)),
   };
 
   /*
    * ============================================
-   * 6. Generate our order number
+   * 8. Generate order number
    * ============================================
    */
 
@@ -1180,24 +1270,18 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   /*
    * ============================================
-   * 7. Create Razorpay Order
+   * 9. Create Razorpay order
    * ============================================
-   *
-   * IMPORTANT:
-   *
-   * The amount comes from our backend,
-   * never from the frontend.
    */
 
   const razorpayOrder = await createRazorpayOrder({
     orderId: orderNumber,
-
     amount: finalPricing.grandTotal,
   });
 
   /*
    * ============================================
-   * 8. Create DB order + reserve stock
+   * 10. Create DB order + reserve stock
    * ============================================
    */
 
@@ -1209,42 +1293,28 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
     session.startTransaction();
 
     /*
-     * Re-check idempotency inside
-     * transaction.
-     *
-     * This protects against two
-     * concurrent checkout requests.
+     * Re-check idempotency inside transaction.
      */
+
     const concurrentOrder = await Order.findOne({
       user: userId,
-
       idempotencyKey: normalizedIdempotencyKey,
     }).session(session);
 
     if (concurrentOrder) {
       await session.abortTransaction();
 
-      /*
-       * The Razorpay order we created
-       * for this losing request is now
-       * unused.
-       *
-       * We simply don't attach it to
-       * the existing order.
-       */
+      validateExistingOrder(concurrentOrder);
+
       if (concurrentOrder.payment?.providerOrderId) {
         return {
           order: concurrentOrder,
 
           payment: {
             provider: "RAZORPAY",
-
             keyId: process.env.RAZORPAY_KEY_ID,
-
             orderId: concurrentOrder.payment.providerOrderId,
-
             amount: Math.round(concurrentOrder.pricing.grandTotal * 100),
-
             currency: "INR",
           },
         };
@@ -1255,11 +1325,8 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     /*
      * ========================================
-     * 9. Re-load cart inside transaction
+     * 11. Re-load cart inside transaction
      * ========================================
-     *
-     * The cart may have changed while
-     * Razorpay order was being created.
      */
 
     const currentCart = await Cart.findOne({
@@ -1271,54 +1338,76 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
     }
 
     /*
-     * Make sure the cart used for the
-     * Razorpay amount is still the same.
+     * Re-select the same checkout items.
      */
-    const currentProductIds = currentCart.items.map((item) => item.product);
+
+    let currentSelectedItems = currentCart.items;
+
+    if (productId) {
+      currentSelectedItems = currentCart.items.filter(
+        (item) => item.product.toString() === productId.toString()
+      );
+
+      if (currentSelectedItems.length === 0) {
+        throw new ApiError(
+          409,
+          "Selected product is no longer in your cart. Please refresh checkout."
+        );
+      }
+    }
+
+    const currentCheckoutCart = {
+      ...currentCart.toObject(),
+      items: currentSelectedItems,
+    };
+
+    /*
+     * ========================================
+     * 12. Re-load selected products
+     * ========================================
+     */
+
+    const currentProductIds = currentSelectedItems.map((item) => item.product);
 
     const currentProducts = await Product.find({
       _id: {
         $in: currentProductIds,
       },
-
       isActive: true,
-
       isArchived: false,
     }).session(session);
 
+    /*
+     * ========================================
+     * 13. Recalculate pricing
+     * ========================================
+     */
+
     const { items: currentOrderItems, pricing: currentPricing } =
       cartPricingService.buildCartSummary({
-        cart: currentCart,
+        cart: currentCheckoutCart,
         products: currentProducts,
       });
 
-    /*
-     * Recalculate shipping for the current cart.
-     *
-     * This makes sure the order pricing saved
-     * in MongoDB matches the amount that will
-     * be paid through Razorpay.
-     */
     const currentShippingQuote = await shippingService.getShippingQuote({
       products: currentProducts,
-      cart: currentCart,
+      cart: currentCheckoutCart,
       deliveryPostcode: address.postalCode,
       paymentMethod: "ONLINE",
     });
 
     const currentFinalPricing = {
       ...currentPricing,
-
       shippingFee: currentShippingQuote.shippingFee,
-
-      grandTotal: currentPricing.itemsTotal + currentShippingQuote.shippingFee,
+      grandTotal: Number((currentPricing.itemsTotal + currentShippingQuote.shippingFee).toFixed(2)),
     };
 
     /*
-     * Prevent paying an amount calculated
-     * from a cart/shipping state that changed
-     * while the Razorpay order was being created.
+     * ========================================
+     * 14. Verify amount has not changed
+     * ========================================
      */
+
     if (
       currentFinalPricing.itemsTotal !== finalPricing.itemsTotal ||
       currentFinalPricing.discount !== finalPricing.discount ||
@@ -1334,45 +1423,36 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     /*
      * ========================================
-     * 10. Snapshot shipping address
+     * 15. Snapshot shipping address
      * ========================================
      */
 
     const shippingAddress = {
       fullName: address.fullName,
-
       phone: address.phone,
-
       houseNumber: address.houseNumber,
-
       landmark: address.landmark || "",
-
       formattedAddress: address.formattedAddress,
-
       city: address.city,
-
       state: address.state,
-
       postalCode: address.postalCode,
-
       country: address.country || "India",
     };
 
     /*
      * ========================================
-     * 11. Reserve inventory
+     * 16. Reserve selected inventory
      * ========================================
+     *
+     * Only currentSelectedItems are reserved.
      */
 
-    for (const cartItem of currentCart.items) {
+    for (const cartItem of currentSelectedItems) {
       const result = await Product.updateOne(
         {
           _id: cartItem.product,
-
           isActive: true,
-
           isArchived: false,
-
           stock: {
             $gte: cartItem.quantity,
           },
@@ -1380,7 +1460,6 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
         {
           $inc: {
             stock: -cartItem.quantity,
-
             reservedStock: cartItem.quantity,
           },
         },
@@ -1399,7 +1478,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     /*
      * ========================================
-     * 12. Create our DB order
+     * 17. Create DB order
      * ========================================
      */
 
@@ -1409,44 +1488,29 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
       [
         {
           orderNumber,
-
           user: userId,
-
           idempotencyKey: normalizedIdempotencyKey,
-
           items: currentOrderItems,
-
           shippingAddress,
-
           pricing: currentFinalPricing,
-
           paymentMethod: "ONLINE",
-
           paymentStatus: "PENDING",
-
           orderStatus: ORDER_STATUS.PLACED,
 
           statusHistory: [
             {
               status: ORDER_STATUS.PLACED,
-
               timestamp: placedAt,
             },
           ],
 
           payment: {
             provider: "RAZORPAY",
-
             providerOrderId: razorpayOrder.id,
-
             paymentId: "",
-
             signature: "",
-
             failureReason: "",
-
             paidAt: null,
-
             expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           },
 
@@ -1462,7 +1526,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     /*
      * ========================================
-     * 13. Commit transaction
+     * 18. Commit transaction
      * ========================================
      */
 
@@ -1472,36 +1536,24 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
       await session.abortTransaction();
     }
 
-    /*
-     * The Razorpay order exists,
-     * but our DB transaction failed.
-     *
-     * It will remain unused and no
-     * customer-facing order will be
-     * created.
-     */
-
     if (error?.code === 11000) {
-      const existingOrder = await Order.findOne({
+      const duplicateOrder = await Order.findOne({
         user: userId,
-
         idempotencyKey: normalizedIdempotencyKey,
       });
 
-      if (existingOrder) {
-        if (existingOrder.payment?.providerOrderId) {
+      if (duplicateOrder) {
+        validateExistingOrder(duplicateOrder);
+
+        if (duplicateOrder.payment?.providerOrderId) {
           return {
-            order: existingOrder,
+            order: duplicateOrder,
 
             payment: {
               provider: "RAZORPAY",
-
               keyId: process.env.RAZORPAY_KEY_ID,
-
-              orderId: existingOrder.payment.providerOrderId,
-
-              amount: Math.round(existingOrder.pricing.grandTotal * 100),
-
+              orderId: duplicateOrder.payment.providerOrderId,
+              amount: Math.round(duplicateOrder.pricing.grandTotal * 100),
               currency: "INR",
             },
           };
@@ -1516,7 +1568,7 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
   /*
    * ============================================
-   * 14. Return checkout information
+   * 19. Return checkout information
    * ============================================
    */
 
@@ -1525,13 +1577,9 @@ const placeOnlineOrder = async ({ userId, addressId, idempotencyKey }) => {
 
     payment: {
       provider: "RAZORPAY",
-
       keyId: process.env.RAZORPAY_KEY_ID,
-
       orderId: razorpayOrder.id,
-
       amount: razorpayOrder.amount,
-
       currency: razorpayOrder.currency,
     },
   };

@@ -1,19 +1,13 @@
 import api from "@/lib/axios";
 
-export const getCheckoutSummary = ({ addressId, paymentMethod } = {}) => {
+export const getCheckoutSummary = ({ addressId, paymentMethod, productId } = {}) => {
   const params = {};
 
-  if (addressId) {
-    params.addressId = addressId;
-  }
+  if (addressId) params.addressId = addressId;
+  if (paymentMethod) params.paymentMethod = paymentMethod;
+  if (productId) params.productId = productId;
 
-  if (paymentMethod) {
-    params.paymentMethod = paymentMethod;
-  }
-
-  return api.get("/checkout", {
-    params,
-  });
+  return api.get("/checkout", { params });
 };
 
 export const placeOrder = (data, idempotencyKey) => {
