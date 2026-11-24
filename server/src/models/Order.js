@@ -157,6 +157,12 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    checkoutProductId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      default: null,
+    },
+
     items: {
       type: [orderItemSchema],
       required: true,

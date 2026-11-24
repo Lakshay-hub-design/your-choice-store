@@ -54,6 +54,8 @@ export default function CartPage() {
 
   const [updatingProductId, setUpdatingProductId] = useState(null);
 
+  const [buyingProductId, setBuyingProductId] = useState(null);
+
   const [itemToRemove, setItemToRemove] = useState(null);
 
   const [isRemoving, setIsRemoving] = useState(false);
@@ -190,6 +192,37 @@ export default function CartPage() {
   }
 
   /* ================================
+   BUY NOW
+================================= */
+
+  const handleBuyNow = (item) => {
+    const product = item?.product;
+
+    if (!product?._id) {
+      toast.error("Unable to identify this product.");
+      return;
+    }
+
+    if (product.stock <= 0) {
+      toast.error("This product is currently out of stock.");
+      return;
+    }
+
+    if (buyingProductId) return;
+
+    const checkoutUrl = `/checkout?productId=${product._id}`;
+
+    if (!user) {
+      router.push(getLoginUrl(checkoutUrl));
+      return;
+    }
+
+    setBuyingProductId(product._id);
+
+    router.push(checkoutUrl);
+  };
+
+  /* ================================
      EMPTY
   ================================= */
 
@@ -248,9 +281,11 @@ export default function CartPage() {
                 key={item.product._id}
                 item={item}
                 isUpdating={updatingProductId === item.product._id}
+                isBuyingNow={buyingProductId === item.product._id}
                 onIncrease={handleIncrease}
                 onDecrease={handleDecrease}
                 onRemove={setItemToRemove}
+                onBuyNow={handleBuyNow}
               />
             ))}
 

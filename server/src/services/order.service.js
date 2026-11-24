@@ -37,6 +37,18 @@ const generateOrderNumber = () => {
   return `YC-${timestamp}-${random}`;
 };
 
+const validateExistingOrder = (existingOrder) => {
+  const existingProductId = existingOrder.checkoutProductId
+    ? existingOrder.checkoutProductId.toString()
+    : null;
+
+  const requestedProductId = productId ? productId.toString() : null;
+
+  if (existingProductId !== requestedProductId) {
+    throw new ApiError(409, "This idempotency key was already used for a different checkout.");
+  }
+};
+
 const releaseOnlineOrderReservation = async (orderId) => {
   const session = await mongoose.startSession();
 
@@ -764,14 +776,8 @@ const placeCODOrder = async ({ userId, addressId, productId = null, idempotencyK
       idempotencyKey: normalizedIdempotencyKey,
     });
 
-    if (existingOrder && productId) {
-      const isSameSingleProductOrder =
-        existingOrder.items.length === 1 &&
-        existingOrder.items[0].product.toString() === productId.toString();
-
-      if (!isSameSingleProductOrder) {
-        throw new ApiError(409, "This idempotency key was already used for a different order.");
-      }
+    if (existingOrder) {
+      validateExistingOrder(existingOrder);
     }
 
     return existingOrder;
@@ -914,6 +920,7 @@ const placeCODOrder = async ({ userId, addressId, productId = null, idempotencyK
         {
           orderNumber: generateOrderNumber(),
           user: userId,
+          checkoutProductId: productId || null,
           idempotencyKey: normalizedIdempotencyKey,
           items: orderItems,
           shippingAddress,
@@ -1125,14 +1132,14 @@ const placeOnlineOrder = async ({ userId, addressId, productId = null, idempoten
    */
 
   const validateExistingOrder = (existingOrder) => {
-    if (!productId) {
-      return;
-    }
+    const existingProductId = existingOrder.checkoutProductId
+      ? existingOrder.checkoutProductId.toString()
+      : null;
 
-    const orderProductIds = existingOrder.items.map((item) => item.product.toString());
+    const requestedProductId = productId ? productId.toString() : null;
 
-    if (orderProductIds.length !== 1 || orderProductIds[0] !== productId.toString()) {
-      throw new ApiError(409, "This idempotency key was already used for a different order.");
+    if (existingProductId !== requestedProductId) {
+      throw new ApiError(409, "This idempotency key was already used for a different checkout.");
     }
   };
 
@@ -1489,6 +1496,7 @@ const placeOnlineOrder = async ({ userId, addressId, productId = null, idempoten
         {
           orderNumber,
           user: userId,
+          checkoutProductId: productId || null,
           idempotencyKey: normalizedIdempotencyKey,
           items: currentOrderItems,
           shippingAddress,

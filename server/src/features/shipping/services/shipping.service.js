@@ -129,7 +129,6 @@ const getShippingQuote = async ({ products, cart, deliveryPostcode, paymentMetho
   });
 
   const cod = paymentMethod === "COD";
-  console.log("SHIPMENT PACKAGE:", packageDetails);
   const response = await shiprocketService.getCourierServiceability({
     pickupPostcode: process.env.SHIPROCKET_PICKUP_POSTCODE,
 

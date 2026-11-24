@@ -1,6 +1,7 @@
 import AnnouncementBar from "@/components/storefront/AnnouncementBar";
 import Navbar from "@/components/storefront/Navbar";
 import Footer from "@/components/storefront/footer/Footer";
+import MobileBottomNav from "@/components/storefront/MobileBottomNav";
 
 import ProtectedRoute from "@/features/auth/ProtectedRoute";
 
@@ -29,6 +30,8 @@ export default function AccountLayout({ children }) {
         </main>
 
         <Footer />
+
+        <MobileBottomNav />
       </div>
     </ProtectedRoute>
   );

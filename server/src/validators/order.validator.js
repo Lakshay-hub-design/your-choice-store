@@ -7,6 +7,14 @@ export const placeOrderSchema = z.object({
     paymentMethod: z.enum(["COD", "ONLINE"], {
       message: "Invalid payment method.",
     }),
+
+    productId: z
+      .string()
+      .trim()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid product ID")
+      .optional(),
+
+    expectedTotal: z.number().finite().nonnegative("Invalid order total").optional(),
   }),
 });
 

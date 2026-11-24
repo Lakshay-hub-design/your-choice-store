@@ -3,7 +3,6 @@ import ApiError from "../utils/ApiError.js";
 
 import ApiResponse from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import mongoose from "mongoose";
 import verifyWebhookSignature from "../utils/verifyWebhookSignature.js";
 import processRazorpayWebhook from "../services/razorpayWebhook.service.js";
 

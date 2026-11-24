@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
 
-export default function CartItem({ item, isUpdating, onIncrease, onDecrease, onRemove }) {
+export default function CartItem({
+  item,
+  isUpdating,
+  onIncrease,
+  onDecrease,
+  onRemove,
+  onBuyNow,
+  isBuyingNow,
+}) {
   const product = item.product;
 
   if (!product) return null;
@@ -17,10 +25,12 @@ export default function CartItem({ item, isUpdating, onIncrease, onDecrease, onR
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : 0;
 
+  const isOutOfStock = product.stock <= 0;
+
   return (
     <div
       className={`rounded-2xl border border-[#EDE9E6] bg-white p-4 transition sm:p-5 ${
-        isUpdating ? "pointer-events-none opacity-60" : ""
+        isUpdating || isBuyingNow ? "pointer-events-none opacity-60" : ""
       }`}
     >
       <div className="flex gap-4">
@@ -55,7 +65,8 @@ export default function CartItem({ item, isUpdating, onIncrease, onDecrease, onR
             <button
               type="button"
               onClick={() => onRemove(item)}
-              className="hidden rounded-lg p-2 text-[#9CA3AF] transition hover:bg-red-50 hover:text-red-500 sm:block"
+              disabled={isUpdating || isBuyingNow}
+              className="hidden rounded-lg p-2 text-[#9CA3AF] transition hover:bg-red-50 hover:text-red-500 disabled:opacity-40 sm:block"
               aria-label="Remove product"
             >
               <Trash2 size={17} />
@@ -87,7 +98,7 @@ export default function CartItem({ item, isUpdating, onIncrease, onDecrease, onR
               <button
                 type="button"
                 onClick={() => onDecrease(item)}
-                disabled={isUpdating}
+                disabled={isUpdating || isBuyingNow}
                 className="flex h-9 w-9 items-center justify-center transition hover:bg-[#FFF9F5] disabled:opacity-40"
               >
                 <Minus size={15} />
@@ -100,23 +111,40 @@ export default function CartItem({ item, isUpdating, onIncrease, onDecrease, onR
               <button
                 type="button"
                 onClick={() => onIncrease(item)}
-                disabled={isUpdating || item.quantity >= product.stock || item.quantity >= 20}
+                disabled={
+                  isUpdating || isBuyingNow || item.quantity >= product.stock || item.quantity >= 20
+                }
                 className="flex h-9 w-9 items-center justify-center transition hover:bg-[#FFF9F5] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus size={15} />
               </button>
             </div>
 
+            {/* Mobile Remove */}
             <button
               type="button"
               onClick={() => onRemove(item)}
-              className="flex items-center gap-1.5 text-xs font-medium text-red-500 sm:hidden"
+              disabled={isUpdating || isBuyingNow}
+              className="flex items-center gap-1.5 text-xs font-medium text-red-500 disabled:opacity-40 sm:hidden"
             >
               <Trash2 size={14} />
               Remove
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Buy Now */}
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => onBuyNow(item)}
+          disabled={isUpdating || isBuyingNow || isOutOfStock}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF5A5F] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#ed484e] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        >
+          <ShoppingBag size={16} />
+          {isBuyingNow ? "Redirecting..." : "Buy Now"}
+        </button>
       </div>
 
       {/* Low stock */}
