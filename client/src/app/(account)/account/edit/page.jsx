@@ -20,7 +20,6 @@ import useAuthStore from "@/store/authStore";
 import { getCurrentUser, updateCustomerProfile } from "@/features/auth/services/authService";
 
 import Avatar, { getInitials } from "@/components/account/Avatar";
-import MobileAccountMenu from "@/components/account/MobileAccountMenu";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -202,8 +201,6 @@ export default function EditProfilePage() {
 
   return (
     <>
-      <MobileAccountMenu />
-
       <div className="mx-auto max-w-3xl">
         <div className="mb-6">
           <Link

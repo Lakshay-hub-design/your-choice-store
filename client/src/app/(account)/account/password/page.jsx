@@ -8,7 +8,6 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, LockKeyhole, ShieldCheck } from "
 
 import useAuthStore from "@/store/authStore";
 import { changeCustomerPassword } from "@/features/auth/services/authService";
-import MobileAccountMenu from "@/components/account/MobileAccountMenu";
 
 export default function PasswordManagerPage() {
   const router = useRouter();
@@ -131,8 +130,6 @@ export default function PasswordManagerPage() {
 
   return (
     <>
-      <MobileAccountMenu />
-
       <div className="mx-auto max-w-3xl">
         <div className="mb-6">
           <Link
